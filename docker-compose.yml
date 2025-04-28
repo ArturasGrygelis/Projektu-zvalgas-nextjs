@@ -11,4 +11,22 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-    command: npm run dev
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+  
+  backend:
+    build:
+      context: ./backend
+    container_name: darbo_asistentas_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./docs:/app/docs  # Mount the docs folder with your Chroma vector store
+      - ./.env:/app/.env  # Mount your .env file inside the container
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - ./.env  # Load environment variables from .env file
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

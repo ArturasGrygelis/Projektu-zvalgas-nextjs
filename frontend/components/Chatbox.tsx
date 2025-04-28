@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -11,6 +11,14 @@ type ChatBoxProps = {
 };
 
 const ChatBox: React.FC<ChatBoxProps> = ({ messages }) => {
+  // Add this state to track if we're on the client
+  const [isClient, setIsClient] = useState(false);
+
+  // Set isClient to true once component mounts on the client
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   return (
     <div className="space-y-4">
       {messages.map((message, index) => (
@@ -33,7 +41,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({ messages }) => {
             <div className="text-sm">{message.content}</div>
             {message.timestamp && (
               <div className="text-xs text-gray-500 mt-1">
-                {new Date(message.timestamp).toLocaleTimeString()}
+                {/* Only show the formatted time on client-side */}
+                {isClient ? new Date(message.timestamp).toLocaleTimeString() : ''}
               </div>
             )}
           </div>

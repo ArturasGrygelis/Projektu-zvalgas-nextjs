@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import chat, payment, workflow_router
 from app.api.routes import workflow_router 
-
+import uvicorn
 
 app = FastAPI(
     title="Darbo Asistentas API",
@@ -13,7 +13,10 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",  # Frontend URL for local development
+        "http://frontend:3000",   # Frontend URL within Docker network
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,3 +30,7 @@ app.include_router(workflow_router.router, prefix="/api", tags=["workflow"])
 @app.get("/")
 async def root():
     return {"message": "Welcome to Darbo Asistentas API"}
+
+# Add this to run the app on all network interfaces
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

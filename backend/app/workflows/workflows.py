@@ -29,8 +29,63 @@ from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from exa_py import Exa
 from dotenv import load_dotenv
+from langchain_core.documents import Document
+import logging
 
-#from langchain_community.vectorstores import Chroma
+logger = logging.getLogger(__name__)
+
+def create_minimal_workflow(
+    vectorstore=None,
+    k=3,
+    search_type="similarity",
+    generator_name="default",
+    generator_temperature=0.7,
+    helper_name="default",
+    helper_temperature=0.7
+):
+    """Create a minimal workflow for chat with document retrieval."""
+    
+    logger.info(f"Creating workflow with model: {generator_name}")
+    
+    # Check if vectorstore is available
+    if vectorstore is None:
+        logger.warning("No vector store provided. Running workflow without retrieval.")
+        # Implement a workflow without document retrieval
+        # This will depend on your LangGraph implementation
+    else:
+        logger.info(f"Using vector store for retrieval with k={k} and search_type={search_type}")
+        # Implement a workflow with document retrieval
+    
+    # Return the workflow (adapt this to your actual implementation)
+    from langchain_core.runnables import RunnablePassthrough
+    
+    # Example minimal workflow implementation - replace with your actual implementation
+    def simple_workflow(state):
+        messages = state.get("messages", [])
+        user_message = next((m["content"] for m in messages if m["role"] == "user"), "")
+        
+        # If we have a vector store, try to retrieve relevant documents
+        context = ""
+        if vectorstore:
+            try:
+                docs = vectorstore.similarity_search(user_message, k=k)
+                context = "\n\n".join(doc.page_content for doc in docs)
+                logger.info(f"Retrieved {len(docs)} documents from vector store")
+            except Exception as e:
+                logger.error(f"Error retrieving from vector store: {str(e)}")
+        
+        # Simplified response generation
+        response = f"This is a response to: {user_message}"
+        if context:
+            response = f"Based on the retrieved information:\n\n{context}\n\nHere's my response: {response}"
+        
+        # Update state with assistant's message
+        state["messages"].append({"role": "assistant", "content": response})
+        return state
+    
+    # Create a RunnablePassthrough that applies the simple_workflow function
+    workflow = RunnablePassthrough(simple_workflow)
+    return workflow
 
 
 
@@ -1191,7 +1246,7 @@ def create_question_rewriter(llm):
     
     # Define the prompt template for question rewriting
     re_write_prompt = PromptTemplate(
-        template="""Esate klausimų perrašytojas, kurio specializacija yra Lietuvos teisė, tobulinanti klausimus, kad būtų galima optimizuoti jų paiešką iš teisinių dokumentų. Jūsų tikslas – išaiškinti teisinę intenciją, pašalinti dviprasmiškumą ir pakoreguoti formuluotes taip, kad jos atspindėtų teisinę kalbą, daugiausia dėmesio skiriant atitinkamiems raktiniams žodžiams. Daryk tai apstrakciai, kadangi taip efektyviausiai gaunama informacija iš vectorstore.
+        template="""Esate klausimų perrašytojas, kurio specializacija yra Lietuvos teisė, tobulinanti klausimus, kad būtų galima optimizuoti jų paiešką iš teisinių dokumentų. Jūsų tikslas – išaiškinti teisinę intenciją, pašalinti dviprasmiškumą ir pakoreguoti formuluotes taip, kad jos atspindėtų teisinę kalbą, daugiausia dėmesio skiriant atitinkamiems raktiniams žodžiams. Daryk tai apstrakciai, kadangi taip efektyviausai gaunama informacija iš vectorstore.
 
 Klausimas turi būti kiek įmanoma abstraktesnis. Kuo abstrakciau tuo geresnis informacijos išgavimas.
 Man nereikia paaiškinimų, tik perrašyto klausimo.
@@ -1224,8 +1279,8 @@ def transform_query(state, question_rewriter):
     documents = state["documents"]
     steps = state["steps"]
     steps.append("question_transformation")
-    generation_count = state.get("generation_count", 0)
-
+    generation_count = state["generation_count"]
+    
     generation_count = 0
 
     # Re-write question

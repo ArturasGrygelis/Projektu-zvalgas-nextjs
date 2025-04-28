@@ -26,15 +26,20 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   useEffect(() => {
     const fetchModels = async () => {
       try {
+        // Add the base URL from environment variables
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        console.log("Fetching models from:", `${apiUrl}/api/models`);
+        
         // Specify the expected response type here
-        const response = await axios.get<ModelsApiResponse>('/api/models');
+        const response = await axios.get<ModelsApiResponse>(`${apiUrl}/api/models`);
         setModels(response.data.models); // Now TypeScript knows response.data has a 'models' property
       } catch (error) {
         console.error('Error fetching models:', error);
-        // Fallback to default models
+        // Fallback to default models and add LLaMA models
         setModels([
           { id: 'default', name: 'Default Assistant' },
-          { id: 'advanced', name: 'Advanced Assistant' }
+          { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'LLaMA-4 Maverick (17B)' },
+          { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'LLaMA-4 Scout (17B)' }
         ]);
       }
     };
@@ -71,7 +76,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
+        <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-10">
           <div className="py-1">
             {models.map((model) => (
               <button
