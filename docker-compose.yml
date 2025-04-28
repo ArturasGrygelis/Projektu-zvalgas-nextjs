@@ -1,0 +1,22 @@
+
+
+services:
+  backend:
+    build: ./backend
+    container_name: darbo_asistentas_backend
+    ports:
+      - "8000:8000"
+    # If your backend needs environment variables, you can define them here:
+    # environment:
+    #   MY_VAR: "myvalue"
+
+  frontend:
+    build: ./frontend
+    container_name: darbo_asistentas_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    # If your frontend needs environment variables, you can define them here:
+    # environment:
+    #   NEXT_PUBLIC_BACKEND_URL: "http://localhost:8000"

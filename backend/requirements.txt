@@ -1,0 +1,19 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+stripe
+langchain
+langgraph
+IPython
+langchain_core
+exa_py
+langchain_groq
+sentence-transformers # This likely pulls in torch
+chromadb
+langchain_community
+
+# Add this line for CPU-only PyTorch
+--extra-index-url https://download.pytorch.org/whl/cpu
+# Add torch explicitly to ensure the index is used for it
+torch
