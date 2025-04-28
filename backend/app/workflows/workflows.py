@@ -28,6 +28,7 @@ from langchain.retrievers import WebResearchRetriever
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from exa_py import Exa
+from dotenv import load_dotenv
 
 #from langchain_community.vectorstores import Chroma
 

@@ -1,5 +1,5 @@
 from app.models.schemas import ChatRequest, ChatResponse
-from app.workflows.workflows import create_chat_workflow
+from app.workflows.workflows import create_minimal_workflow
 from datetime import datetime
 import uuid
 
@@ -17,7 +17,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
     }
     
     # Get the workflow
-    workflow = create_chat_workflow()
+    workflow = create_minimal_workflow()
     
     # Execute the workflow with the initial state
     final_state = workflow.invoke(initial_state)
