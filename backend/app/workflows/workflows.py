@@ -5,7 +5,7 @@ from IPython.display import Image, display
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain.schema import Document
 from langgraph.graph import START, END, StateGraph
-from langchain.prompts import PromptTemplate
+from langchain.prompts import PromptTemplate,ChatPromptTemplate
 import uuid
 from langchain_groq import ChatGroq
 from langchain_community.utilities import GoogleSerperAPIWrapper
@@ -319,7 +319,7 @@ def create_minimal_workflow(vectorstore, k, search_type,generator_name, generato
         documents: List[str]
         steps: List[str]
         generation_count: int
-        
+        chat_history: List[dict] 
         
 
     
@@ -343,7 +343,7 @@ def create_minimal_workflow(vectorstore, k, search_type,generator_name, generato
 
     # Define the nodes
     workflow.add_node("ask_question", lambda state: ask_question(state))
-    
+    workflow.add_node("contextualize_user_query", lambda state: contextualize_user_query(state, llm))
     workflow.add_node("answer_chit_chat", lambda state: answer_chit_chat(state, llm))
     workflow.add_node("retrieve", lambda state: retrieve(state, vectorstore, k, search_type))
     workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
@@ -360,10 +360,12 @@ def create_minimal_workflow(vectorstore, k, search_type,generator_name, generato
         lambda state: check_chit_chat(state, llm), # Function directly returns "chit_chat" or "work_related"
         {
             "chit_chat": "answer_chit_chat", # If chit_chat, go to answer node
-            "work_related": "retrieve" # If work_related, start normal workflow
+            "work_related": "contextualize_user_query" # If work_related, start normal workflow
         }
     )
     
+
+    workflow.add_edge("contextualize_user_query", "retrieve")
     # Continue normal workflow for work-related questions
     workflow.add_edge("retrieve", "generate")
     
@@ -2867,6 +2869,93 @@ class InstructRetriever(BaseRetriever):
         """Add instruction to the query before passing to the base retriever."""
         formatted_query = get_detailed_instruct(self.task_description, query)
         return self.base_retriever.invoke(formatted_query)
+    
+
+
+
+class ContextualizedUserQuery(BaseModel):
+    """Structure for a contextualized user query."""
+    rewritten_question: str = Field(description="The rewritten question based on chat history and context")
+    has_context: bool = Field(description="Whether this question has relevant context from previous exchanges")
+
+# Define the prompt template for contextualization
+contextualize_query_prompt = ChatPromptTemplate.from_messages([
+    ("system", """As a legal assistant specializing in Lithuanian labor law, your task is to contextualize the user's current question based on the chat history.
+If the current question refers to previous context or builds on previous questions, incorporate that context to make a self-contained question.
+If the current question stands alone and doesn't need previous context, simply leave it as is.
+Only modify the question if it clearly references something from the chat history that would make it unclear on its own."""),
+    ("human", """Chat History:
+{chat_history}
+
+Current Question: {question}
+
+Provide a structured response with:
+1. The rewritten, contextualized question (or the original if no contextualization is needed)
+2. Whether this question has relevant context from previous exchanges (true/false)"""),
+])
+
+# Define the contextualization function
+def contextualize_user_query(state, llm):
+    """
+    Contextualizes the user query based on chat history (if available).
+    """
+    question = state["question"]
+    steps = state["steps"]
+    steps.append("contextualize_user_query")
+    
+    # Get chat history if available
+    chat_history = state.get("chat_history", [])
+    
+    # If no chat history, skip contextualization
+    if not chat_history:
+        logger.info("No chat history available, skipping contextualization")
+        return {
+            "question": question,
+            "steps": steps
+        }
+    
+    logger.info(f"Contextualizing query with chat history of {len(chat_history)} messages")
+    
+    # Use structured output
+    structured_output = llm.with_structured_output(ContextualizedUserQuery)
+    
+    # Create the chain
+    contextualization_chain = (
+        {
+            "question": lambda x: x["question"],
+            "chat_history": lambda x: x["chat_history"],
+        }
+        | contextualize_query_prompt
+        | structured_output
+    )
+    
+    try:
+        # Get the contextualized query
+        result = contextualization_chain.invoke({
+            "question": question,
+            "chat_history": chat_history
+        })
+        
+        if result.has_context:
+            logger.info(f"Contextualized query: '{result.rewritten_question}'")
+            return {
+                "question": result.rewritten_question,  # Replace the original question
+                "original_question": question,  # Store the original for reference
+                "steps": steps
+            }
+        else:
+            logger.info("No contextualization needed")
+            return {
+                "question": question,
+                "steps": steps
+            }
+    except Exception as e:
+        logger.error(f"Error contextualizing query: {e}", exc_info=True)
+        # On error, use the original question
+        return {
+            "question": question,
+            "steps": steps
+        }    
 
 
 
