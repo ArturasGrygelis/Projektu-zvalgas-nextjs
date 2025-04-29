@@ -41,10 +41,10 @@ export default function Home() {
           <div className="container mx-auto px-4 flex flex-col md:flex-row items-center">
             <div className="md:w-1/2 mb-10 md:mb-0">
               <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
-                Your Lithuanian Labor Law Assistant Powered by AI
+                Virtualus darbo teises asistentas , sukurtas jums
               </h1>
               <p className="text-xl mb-8 text-indigo-100">
-                Get instant answers to your work-related questions and professional guidance on Lithuanian employment law.
+                Gaukite greitus ir darbo kodeksu pagrįstus atsakymus į visus savo klausimus apie darbo teisę Lietuvoje.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link href="/chat" className="bg-white text-indigo-700 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-medium text-center shadow-lg transform hover:scale-105 duration-200">
@@ -54,7 +54,7 @@ export default function Home() {
                   href="#pricing" 
                   className="bg-indigo-800/50 backdrop-blur-sm text-white border border-indigo-400 px-8 py-3 rounded-lg hover:bg-indigo-700 transition font-medium text-center shadow-md transform hover:scale-105 duration-200"
                 >
-                  View Pricing
+                  Peržiūrėti kainas
                 </a>
               </div>
             </div>
