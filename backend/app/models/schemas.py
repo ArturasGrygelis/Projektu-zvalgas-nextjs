@@ -2,6 +2,11 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+
+class SourceDocument(BaseModel):
+    page_content: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
 class MessageBase(BaseModel):
     content: str
     role: str = "user"  # "user" or "assistant"
@@ -22,6 +27,7 @@ class ChatResponse(BaseModel):
     message: str
     conversation_id: str
     created_at: datetime = Field(default_factory=datetime.now)
+    sources: Optional[List[SourceDocument]] = None 
 
 # Payment related models
 class StripeWebhookEvent(BaseModel):

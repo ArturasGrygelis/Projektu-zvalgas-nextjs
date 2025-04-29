@@ -1,9 +1,10 @@
-from app.models.schemas import ChatRequest, ChatResponse
+from app.models.schemas import ChatRequest, ChatResponse, SourceDocument # Import SourceDocument
 from app.workflows.workflows import create_minimal_workflow
 from app.vectorstore.store import get_vectorstore
 from datetime import datetime
 import uuid
 import logging
+from typing import List, Optional
 
 # Set up logging for this specific file
 logger = logging.getLogger(__name__)
@@ -51,13 +52,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         final_state = workflow.invoke(initial_state)
         logger.info(f"Workflow execution completed. Final state keys: {final_state.keys() if final_state else 'None'}")
 
-        # --- START OF CHANGES ---
-        # Get the assistant's response from the 'generation' key
-        logger.info("Extracting assistant response...")
-        if not final_state or "generation" not in final_state:
-            logger.error("Final state missing or 'generation' not found in final_state!")
-            raise ValueError("Workflow did not return the 'generation' key")
-
+        # Extract response text
         response_text = final_state.get("generation")
 
         if not response_text:
@@ -65,13 +60,28 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
             response_text = "Atsiprašau, nepavyko sugeneruoti atsakymo." # Default error message
         else:
             logger.info(f"Generated response (first 100 chars): {response_text[:100]}...")
-        # --- END OF CHANGES ---
 
-        # Create and return the response
+        # --- Extract and Format Sources ---
+        formatted_sources: Optional[List[SourceDocument]] = None
+        retrieved_docs = final_state.get("documents")
+        if retrieved_docs:
+            logger.info(f"Formatting {len(retrieved_docs)} sources for response.")
+            formatted_sources = [
+                SourceDocument(
+                    page_content=doc.page_content,
+                    metadata=doc.metadata or {} # Ensure metadata is at least an empty dict
+                ) for doc in retrieved_docs
+            ]
+        else:
+            logger.info("No documents found in final state to format as sources.")
+        # --- End Source Formatting ---
+
+        # Create and return the response, including sources
         return ChatResponse(
             message=response_text,
             conversation_id=conversation_id,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            sources=formatted_sources # Pass formatted sources
         )
     except Exception as e:
         logger.error(f"Error in get_chat_response: {str(e)}", exc_info=True)

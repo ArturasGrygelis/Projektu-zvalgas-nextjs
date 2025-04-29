@@ -4,24 +4,33 @@ import axios from 'axios';
 import ModelSelector from '../components/ModelSelector';
 import ChatBox from '../components/Chatbox';
 
+// Define the source structure matching the backend
+interface SourceDoc {
+  page_content: string;
+  metadata: Record<string, any>; // Or define more specific metadata types if known
+}
+
+// Update ChatApiResponse
+interface ChatApiResponse {
+  message: string;
+  conversation_id: string;
+  created_at: string;
+  sources?: SourceDoc[]; // Add optional sources array
+}
+
+// Update Message type
 type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: Date;
+  sources?: SourceDoc[]; // Add optional sources array
 };
-
-// --- 1. Correct the API Response Interface ---
-interface ChatApiResponse {
-  message: string; // Correct key
-  conversation_id: string;
-  created_at: string; // It's likely a string initially
-}
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: 'system', 
-      content: 'Welcome to Darbo Asistentas! How can I help you with work-related questions in Lithuania?',
+      content: 'Sveiki atvyke, aš esu darbo asistentas. Kaip galiu jums padėti? /n Prisiminkite, aš esu virtualus asistentas, galiu kartais suklysti, sprendimus priimkite naudodami savo kritinį mąstymą.',
       timestamp: new Date()
     }
 
@@ -111,13 +120,14 @@ export default function Chat() {
          // Keep the default 'now' timestamp if parsing fails
       }
 
-      // Add the assistant's message to the state
+      // Add the assistant's message to the state, including sources
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
           content: response.data.message, // Access the correct key
-          timestamp: responseTimestamp     // Use the safely parsed timestamp
+          timestamp: responseTimestamp,     // Use the safely parsed timestamp
+          sources: response.data.sources     // Store the sources
         }
       ]);
       // --- End of Changes ---
@@ -159,8 +169,8 @@ export default function Chat() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Head>
-        <title>Darbo Asistentas | Lithuanian Work Law Assistant</title>
-        <meta name="description" content="Get expert answers to your questions about Lithuanian labor law and employment regulations" />
+        <title>Darbo Asistentas </title>
+        <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su  Lietuvos darbo teisę " />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
@@ -208,7 +218,7 @@ export default function Chat() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about Lithuanian labor law, employment rights, or work regulations..."
+              placeholder="Klauskite apie darbo teisę ar įstatymus..."
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-brown-500 resize-none min-h-[50px] max-h-[150px] pr-[90px]"
               disabled={isLoading}
               rows={1}
