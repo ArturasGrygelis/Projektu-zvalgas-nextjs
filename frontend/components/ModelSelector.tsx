@@ -16,7 +16,7 @@ type ModelSelectorProps = {
   onModelSelect: (modelId: string) => void;
 };
 
-const ModelSelector: React.FC<ModelSelectorProps> = ({ 
+const ModelSelector: React.FC<ModelSelectorProps> = React.memo(({ 
   selectedModel, 
   onModelSelect 
 }) => {
@@ -26,18 +26,16 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        // Add the base URL from environment variables
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         console.log("Fetching models from:", `${apiUrl}/api/models`);
         
-        // Specify the expected response type here
         const response = await axios.get<ModelsApiResponse>(`${apiUrl}/api/models`);
-        setModels(response.data.models); // Now TypeScript knows response.data has a 'models' property
+        console.log("Models response:", response.data);
+        setModels(response.data.models);
       } catch (error) {
         console.error('Error fetching models:', error);
-        // Fallback to default models and add LLaMA models
+        // Fallback models with Maverick as first option
         setModels([
-          { id: 'default', name: 'Default Assistant' },
           { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'LLaMA-4 Maverick (17B)' },
           { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'LLaMA-4 Scout (17B)' }
         ]);
@@ -94,6 +92,6 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default ModelSelector;

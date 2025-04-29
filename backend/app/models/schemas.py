@@ -16,7 +16,7 @@ class Message(MessageBase):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    model_name: Optional[str] = "default"
+    model_name: Optional[str] = "meta-llama/llama-4-maverick-17b-128e-instruct"
 
 class ChatResponse(BaseModel):
     message: str

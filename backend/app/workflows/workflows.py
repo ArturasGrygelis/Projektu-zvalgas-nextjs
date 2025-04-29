@@ -34,58 +34,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def create_minimal_workflow(
-    vectorstore=None,
-    k=3,
-    search_type="similarity",
-    generator_name="default",
-    generator_temperature=0.7,
-    helper_name="default",
-    helper_temperature=0.7
-):
-    """Create a minimal workflow for chat with document retrieval."""
-    
-    logger.info(f"Creating workflow with model: {generator_name}")
-    
-    # Check if vectorstore is available
-    if vectorstore is None:
-        logger.warning("No vector store provided. Running workflow without retrieval.")
-        # Implement a workflow without document retrieval
-        # This will depend on your LangGraph implementation
-    else:
-        logger.info(f"Using vector store for retrieval with k={k} and search_type={search_type}")
-        # Implement a workflow with document retrieval
-    
-    # Return the workflow (adapt this to your actual implementation)
-    from langchain_core.runnables import RunnablePassthrough
-    
-    # Example minimal workflow implementation - replace with your actual implementation
-    def simple_workflow(state):
-        messages = state.get("messages", [])
-        user_message = next((m["content"] for m in messages if m["role"] == "user"), "")
-        
-        # If we have a vector store, try to retrieve relevant documents
-        context = ""
-        if vectorstore:
-            try:
-                docs = vectorstore.similarity_search(user_message, k=k)
-                context = "\n\n".join(doc.page_content for doc in docs)
-                logger.info(f"Retrieved {len(docs)} documents from vector store")
-            except Exception as e:
-                logger.error(f"Error retrieving from vector store: {str(e)}")
-        
-        # Simplified response generation
-        response = f"This is a response to: {user_message}"
-        if context:
-            response = f"Based on the retrieved information:\n\n{context}\n\nHere's my response: {response}"
-        
-        # Update state with assistant's message
-        state["messages"].append({"role": "assistant", "content": response})
-        return state
-    
-    # Create a RunnablePassthrough that applies the simple_workflow function
-    workflow = RunnablePassthrough(simple_workflow)
-    return workflow
+
 
 
 
@@ -1369,7 +1318,7 @@ def QA_chain(llm):
         
         Tau pateikiamos teisės kodeksų ištraukos yra naujausios redakcijos ir neginčijamos susijusios su klausimu.
         Klausimai yra susije su  Lietuvos teise ir dokumentai iš lietuvos teises šaltinių. 
-        Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}, tau šitų dokumentų turi užtekti, jei vartotojas matys kad atsakymas per mažas ar informacijos per mažai dokumentuose, jis padidint informacijos kiekį.
+        Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}, tau šitų dokumentų turi užtekti, jei vartotojas matys kad atsakymas per mažas ar informacijos per mažai, jis padidint informacijos kiekį.
         Turi suformuluoti atsakymą pagal pateiktus dokumentus ir tau jų turi užtekti. 
         
         Atsakyk tik remdamasis pateiktais dokumentais. Jei atsakymo negalima rasti dokumentuose, pasakyk, iš kur žinai atsakymą. 

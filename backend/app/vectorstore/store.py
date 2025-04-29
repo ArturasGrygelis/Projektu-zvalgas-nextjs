@@ -49,6 +49,7 @@ class VectorStore:
             logger.info(f"Vector store path: {self.store_path}")
             self._load_store()
             self.initialized = True
+            logger.info("Vector store initialization completed")
 
     def _load_store(self):
         try:

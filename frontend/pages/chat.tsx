@@ -10,8 +10,11 @@ type Message = {
   timestamp?: Date;
 };
 
+// --- 1. Correct the API Response Interface ---
 interface ChatApiResponse {
-  response: string;
+  message: string; // Correct key
+  conversation_id: string;
+  created_at: string; // It's likely a string initially
 }
 
 export default function Chat() {
@@ -21,10 +24,13 @@ export default function Chat() {
       content: 'Welcome to Darbo Asistentas! How can I help you with work-related questions in Lithuania?',
       timestamp: new Date()
     }
+
+
+    
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('default');
+  const [selectedModel, setSelectedModel] = useState<string>("meta-llama/llama-4-maverick-17b-128e-instruct");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -79,32 +85,65 @@ export default function Chat() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await axios.post<ChatApiResponse>(`${apiUrl}/api/chat`, {
         message: input,
-        model: selectedModel
+        model_name: selectedModel
+      }, {
+        // Increase the timeout (e.g., to 90 seconds or 120 seconds)
+        timeout: 120000 // 90 seconds (90,000 milliseconds)
+        // timeout: 120000 // 120 seconds (120,000 milliseconds)
       });
-      
-      // Add assistant message
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: response.data.response,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
+
+      console.log("Response received:", response.data);
+
+      // --- 2. Safer Timestamp Parsing & State Update ---
+      let responseTimestamp = new Date(); // Default to now
+      try {
+        // Attempt to parse the timestamp from the response
+        if (response.data.created_at) {
+          responseTimestamp = new Date(response.data.created_at);
+          // Check if parsing resulted in a valid date
+          if (isNaN(responseTimestamp.getTime())) {
+             console.warn("Invalid date format received:", response.data.created_at);
+             responseTimestamp = new Date(); // Fallback to now if invalid
+          }
+        }
+      } catch (dateError) {
+         console.error("Error parsing date:", dateError);
+         // Keep the default 'now' timestamp if parsing fails
+      }
+
+      // Add the assistant's message to the state
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: response.data.message, // Access the correct key
+          timestamp: responseTimestamp     // Use the safely parsed timestamp
+        }
+      ]);
+      // --- End of Changes ---
+
+      setInput(''); // Clear input field
+
     } catch (error) {
       console.error('Error fetching response:', error);
-      
-      // Add error message
+
+      // --- 3. Improved Error Message Display ---
+      const errorMessage = axios.isAxiosError(error)
+        ? `Error: ${error.response?.data?.detail || error.message}`
+        : `Error: ${error instanceof Error ? error.message : String(error)}`;
+
       setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'system', 
-          content: 'Sorry, there was an error processing your request. Please try again later.',
+        ...prev,
+        {
+          role: 'system',
+          content: `⚠️ ${errorMessage}`, // Show more specific error
           timestamp: new Date()
         }
       ]);
+      // --- End of Changes ---
+
     } finally {
       setIsLoading(false);
-      // Focus back on input after response
       inputRef.current?.focus();
     }
   };
@@ -128,11 +167,30 @@ export default function Chat() {
       <header className="bg-white shadow-sm py-3 sticky top-0 z-10">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
           <h1 className="text-xl font-bold text-brown-700">Darbo Asistentas</h1>
-          <div className="w-full md:w-auto">
+          <div className="flex items-center mb-4">
             <ModelSelector 
-              selectedModel={selectedModel} 
-              onModelSelect={setSelectedModel} 
+              selectedModel={selectedModel}
+              onModelSelect={setSelectedModel}
             />
+            <button 
+              onClick={async () => {
+                try {
+                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                  const testResponse = await axios.post(`${apiUrl}/api/raw-response`, {
+                    message: "Test message",
+                    model_name: selectedModel
+                  });
+                  console.log("Test response:", testResponse.data);
+                  alert(`Test successful! Response: ${JSON.stringify(testResponse.data)}`);
+                } catch (error) {
+                  console.error("Test failed:", error);
+                  alert(`Test failed: ${error}`);
+                }
+              }}
+              className="ml-2 px-3 py-1 bg-blue-100 rounded text-sm"
+            >
+              Test Connection
+            </button>
           </div>
         </div>
       </header>
