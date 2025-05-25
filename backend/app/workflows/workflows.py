@@ -51,7 +51,19 @@ EXA_API_KEY = os.environ.get('EXA_API_KEY')
 
 
 
+from vectorstore.store import get_vectorstore, search_documents
 
+# Get summary store
+summary_store = get_vectorstore("summary")
+
+# Get full store  
+full_store = get_vectorstore("full")
+
+# Search in summary store
+docs = search_documents(query, k=20, store_type="summary")
+
+# Search in full store
+docs = search_documents(query, k=10, store_type="full")
 
 task_description = "Raskite teisinius straipsnius ir nuostatas, kurie tiesiogiai susiję su užklausa apie darbo teisę Lietuvoje"
 
