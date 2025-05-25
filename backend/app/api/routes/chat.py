@@ -17,6 +17,7 @@ async def chat(request: ChatRequest):
         response = get_chat_response(request)
         return response
     except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/models")
