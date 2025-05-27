@@ -3,7 +3,7 @@ services:
     build:
       context: ./frontend
       target: development
-    container_name: darbo_asistentas_frontend
+    container_name: mano_bustas_asistentas_frontend
     ports:
       - "3000:3000"
     volumes:
@@ -18,13 +18,14 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: darbo_asistentas_backend
+    container_name: mano_bustas_asistentas_backend
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./docs:/app/docs  # Mount the docs folder with your Chroma vector store
-      - ./.env:/app/.env  # Mount your .env file inside the container
+      - ./docs:/app/docs 
+      - ./docs2:/app/docs2 
+      - ./.env:/app/.env
     environment:
       - NODE_ENV=development
     env_file:
