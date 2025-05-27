@@ -2,7 +2,9 @@ import logging
 from fastapi import FastAPI
 from app.api.routes import chat
 from fastapi.middleware.cors import CORSMiddleware
-from app.vectorstore.store import VectorStore
+from app.vectorstore.store import get_vectorstore
+
+summary_vectorstore =  get_vectorstore("summary")
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +29,7 @@ app.add_middleware(
 async def initialize_vectorstore():
     logger.info("Initializing Chroma vector store during app startup...")
     # This creates the singleton instance that will be reused
-    vector_store = VectorStore()
+    vector_store = summary_vectorstore()
     # Test if it's working
     if vector_store.get_store():
         logger.info("✓ Vector store initialized successfully")

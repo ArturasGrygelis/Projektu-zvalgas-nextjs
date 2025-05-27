@@ -51,19 +51,19 @@ EXA_API_KEY = os.environ.get('EXA_API_KEY')
 
 
 
-from vectorstore.store import get_vectorstore, search_documents
+
 
 # Get summary store
-summary_store = get_vectorstore("summary")
+#summary_store = get_vectorstore("summary")
 
 # Get full store  
-full_store = get_vectorstore("full")
+#full_store = get_vectorstore("full")
 
 # Search in summary store
-docs = search_documents(query, k=20, store_type="summary")
+#docs = search_documents(query, k=20, store_type="summary")
 
 # Search in full store
-docs = search_documents(query, k=10, store_type="full")
+#docs = search_documents(query, k=10, store_type="full")
 
 task_description = "Raskite teisinius straipsnius ir nuostatas, kurie tiesiogiai susiję su užklausa apie darbo teisę Lietuvoje"
 
@@ -1381,7 +1381,6 @@ def retrieve(state, vectorstore, k, search_type):
                 search_kwargs={"k": k}
             )
             
-
 # Instruction-based retriever
             instruct_retriever = InstructRetriever(
                 base_retriever=basic_retriever,
@@ -1416,6 +1415,75 @@ def retrieve(state, vectorstore, k, search_type):
         
         k = math.ceil(k / 2)
         retriever = vectorstore.as_retriever(
+            search_type=search_type,
+            search_kwargs={"k": k}
+        )
+        
+        for q in sub_questions:
+            # Ensure each sub-question is a string
+            if not isinstance(q, str):
+                raise TypeError(f"Each sub-question must be a string, got {type(q)} for question: {q}")
+            
+            document = retriever.invoke(q)
+            documents.extend(document)  # Append the documents retrieved for this sub-question
+
+        steps.append("retrieve_documents")
+        return {
+            "documents": documents,
+            "steps": steps
+        }
+
+
+def retrieve_summaries(state, summaries_vectorstore, k, search_type):
+    """
+    Retrieve documents based on the processed question.
+    """
+    steps = state["steps"]
+    sub_questions = state.get("sub_questions")
+    processed_question = state.get("processed_question")
+    question = state["question"]
+
+    if sub_questions is None:
+        if processed_question is not None:
+            basic_retriever = summaries_vectorstore.as_retriever(
+                search_type=search_type,
+                search_kwargs={"k": k}
+            )
+            
+# Instruction-based retriever
+            instruct_retriever = InstructRetriever(
+                base_retriever=basic_retriever,
+                task_description=task_description
+            )
+            documents = instruct_retriever.invoke(processed_question)
+
+            steps.append("retrieve_documents")
+            return {
+                "documents": documents,
+                "steps": steps
+            }
+        else:
+            basic_retriever = summaries_vectorstore.as_retriever(
+                search_type=search_type,
+                search_kwargs={"k": k}
+            )
+            instruct_retriever = InstructRetriever(
+                base_retriever=basic_retriever,
+                task_description=task_description
+            )
+            documents = instruct_retriever.invoke(question)
+
+            steps.append("retrieve_documents")
+            return {
+                "documents": documents,
+                "steps": steps
+            }
+    else:
+        documents = []
+        import math
+        
+        k = math.ceil(k / 2)
+        retriever = summaries_vectorstore.as_retriever(
             search_type=search_type,
             search_kwargs={"k": k}
         )
@@ -1520,7 +1588,73 @@ def grade_documents(state, retrieval_grader):
             "steps": steps,
         }    
     
+
+
+def grade_summary_documents(state, retrieval_grader):
+    question = state["question"]
+    documents = state["documents"]
+    decomposed_documents = state.get('decomposed_documents')
+    steps = state["steps"]
+    steps.append("grade_summary_documents")
     
+    filtered_docs = []
+    web_results_list = []
+    search = "No"
+    
+    if decomposed_documents is None:
+
+
+        for d in documents:
+             # Call the grading function
+            score = retrieval_grader.invoke({"question": question, "documents": d})
+            print(f"Grader output for document: {score}")  # Detailed debugging output
+        
+        # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1",'taip']:
+                filtered_docs.append(d)
+            elif len(filtered_docs) < 4:  
+                search = "Yes"
+            
+    # Check the decision-making process
+        print(f"Final decision - Perform web search: {search}")
+        print(f"Filtered documents count: {len(filtered_docs)}")
+    
+        
+
+    else:
+        # Handle decomposed documents (dictionary with question-document pairs)
+        for q, d in decomposed_documents.items():
+            # Call the grading function
+            score = retrieval_grader.invoke({"question": q, "documents": d})
+            print(f"Grader output for question '{q}' and document: {score}")  # Debugging output
+
+            # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                filtered_docs.append(d)
+            elif len(filtered_docs) < 4:  
+                search = "Yes"
+
+
+            
+
+
+
+        # Debugging output
+        print(f"Final decision - Perform web search: {search}")
+        print(f"Filtered decomposed documents count: {len(filtered_docs)}")
+
+
+    return {
+            "documents": filtered_docs,
+            "question": question,
+            "search": search,
+            "steps": steps,
+        }    
+    
+
+
 
 
 def clean_exa_document(doc):
