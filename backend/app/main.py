@@ -2,9 +2,7 @@ import logging
 from fastapi import FastAPI
 from app.api.routes import chat
 from fastapi.middleware.cors import CORSMiddleware
-from app.vectorstore.store import get_vectorstore
-
-summary_vectorstore =  get_vectorstore("summary")
+from app.vectorstore.store import get_vectorstore, VectorStore
 
 # Configure logging
 logging.basicConfig(
@@ -27,18 +25,17 @@ app.add_middleware(
 # Initialize vector store singleton on startup
 @app.on_event("startup")
 async def initialize_vectorstore():
-    logger.info("Initializing Chroma vector store during app startup...")
-    # This creates the singleton instance that will be reused
-    vector_store = summary_vectorstore()
-    # Test if it's working
-    if vector_store.get_store():
+    logger.info("Initializing vector store system during app startup...")
+    
+    # Initialize the singleton VectorStore instance
+    vector_store = VectorStore()
+    
+    # Test the store
+    store = vector_store.get_store()  # No parameters
+    
+    if store:
         logger.info("✓ Vector store initialized successfully")
-        # Perform a small test query to fully load embeddings
-        try:
-            docs = vector_store.similarity_search("startup test query", k=1)
-            logger.info(f"Vector store test query returned {len(docs)} documents")
-        except Exception as e:
-            logger.error(f"Test query failed: {str(e)}")
+        logger.info(f"Vector store collection count: {store._collection.count()}")
     else:
         logger.error("✗ Vector store initialization failed!")
 
@@ -50,12 +47,10 @@ app.include_router(chat.router, prefix="/api", tags=["chat"])
 async def health_check():
     """Health check endpoint to verify service is running"""
     # Check if vector store is initialized
-    from app.vectorstore.store import get_vectorstore
-    vectorstore = get_vectorstore()
-    vector_store_status = vectorstore is not None
+    vectorstore = get_vectorstore()  # No parameters
     
     return {
         "status": "healthy",
-        "vectorstore_initialized": vector_store_status,
-        "default_model": "meta-llama/llama-4-maverick-17b-128e-instruct"
+        "vectorstore_initialized": vectorstore is not None,
+        "vectorstore_count": vectorstore._collection.count() if vectorstore else 0
     }
