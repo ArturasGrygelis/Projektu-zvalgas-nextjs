@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect, FormEvent } from 'react';
 import Head from 'next/head';
 import axios from 'axios';
-import ModelSelector from '../components/ModelSelector';
 import ChatBox from '../components/Chatbox';
-import DocumentSidebar from '../components/DocumentSidebar'; // Add this import
+import DocumentSidebar from '../components/DocumentSidebar';
 
 // Define the source structure matching the backend
 interface SourceDoc {
   page_content: string;
-  metadata: Record<string, any>; // Or define more specific metadata types if known
+  metadata: Record<string, any>;
 }
 
 // Update ChatApiResponse to include summary_documents
@@ -16,8 +15,8 @@ interface ChatApiResponse {
   message: string;
   conversation_id: string;
   created_at: string;
-  sources?: SourceDoc[]; // Add optional sources array
-  summary_documents?: SourceDoc[]; // Add this field for sidebar documents
+  sources?: SourceDoc[]; 
+  summary_documents?: SourceDoc[];
 }
 
 // Update Message type
@@ -25,24 +24,26 @@ type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: Date;
-  sources?: SourceDoc[]; // Add optional sources array
+  sources?: SourceDoc[];
 };
 
 export default function Chat() {
-  // Add state for summary documents and sidebar visibility
+  // State variables
   const [summaryDocuments, setSummaryDocuments] = useState<SourceDoc[]>([]);
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: 'system', 
-      content: 'Sveiki atvyke, Mano Būstas asistentas. Kaip galiu jums padėti? /n Prisiminkite, aš esu virtualus asistentas, galiu kartais suklysti.',
+      content: 'Sveiki atvykę, Projektų Žvalgas asistentas. Kaip galiu jums padėti? \n\nPrisiminkite, aš esu virtualus asistentas, galiu kartais suklysti.',
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>("meta-llama/llama-4-scout-17b-16e-instruct");
+  // Hard-coded model selection
+  const selectedModel = "meta-llama/llama-4-scout-17b-16e-instruct";
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,7 +78,7 @@ export default function Chat() {
     e.target.style.height = 'auto';
     
     // Set new height based on content
-    const newHeight = Math.min(e.target.scrollHeight, 150);
+    const newHeight = Math.min(e.target.scrollHeight, 80);
     e.target.style.height = `${newHeight}px`;
   };
 
@@ -106,29 +107,27 @@ export default function Chat() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await axios.post<ChatApiResponse>(`${apiUrl}/api/chat`, {
         message: input,
-        model_name: selectedModel
+        model_name: selectedModel,
+        conversation_id: conversationId
       }, {
-        // Increase the timeout (e.g., to 90 seconds or 120 seconds)
-        timeout: 120000 // 90 seconds (90,000 milliseconds)
+        timeout: 120000
       });
 
       console.log("Response received:", response.data);
+      console.log("Summary documents:", response.data.summary_documents?.length || 0);
 
       // --- Safer Timestamp Parsing & State Update ---
-      let responseTimestamp = new Date(); // Default to now
+      let responseTimestamp = new Date();
       try {
-        // Attempt to parse the timestamp from the response
         if (response.data.created_at) {
           responseTimestamp = new Date(response.data.created_at);
-          // Check if parsing resulted in a valid date
           if (isNaN(responseTimestamp.getTime())) {
              console.warn("Invalid date format received:", response.data.created_at);
-             responseTimestamp = new Date(); // Fallback to now if invalid
+             responseTimestamp = new Date();
           }
         }
       } catch (dateError) {
          console.error("Error parsing date:", dateError);
-         // Keep the default 'now' timestamp if parsing fails
       }
 
       // Add the assistant's message to the state, including sources
@@ -136,9 +135,9 @@ export default function Chat() {
         ...prev,
         {
           role: 'assistant',
-          content: response.data.message, // Access the correct key
-          timestamp: responseTimestamp,     // Use the safely parsed timestamp
-          sources: response.data.sources     // Store the sources
+          content: response.data.message,
+          timestamp: responseTimestamp,
+          sources: response.data.sources
         }
       ]);
 
@@ -147,11 +146,16 @@ export default function Chat() {
         console.log("Updating sidebar with summary documents:", response.data.summary_documents.length);
         setSummaryDocuments(response.data.summary_documents);
       }
+      
+      // Store conversation ID if it's the first message
+      if (!conversationId && response.data.conversation_id) {
+        setConversationId(response.data.conversation_id);
+      }
 
     } catch (error) {
       console.error('Error fetching response:', error);
 
-      // --- Improved Error Message Display ---
+      // Improved error message display
       const errorMessage = axios.isAxiosError(error)
         ? `Error: ${error.response?.data?.detail || error.message}`
         : `Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -160,7 +164,7 @@ export default function Chat() {
         ...prev,
         {
           role: 'system',
-          content: `⚠️ ${errorMessage}`, // Show more specific error
+          content: `⚠️ ${errorMessage}`,
           timestamp: new Date()
         }
       ]);
@@ -180,29 +184,29 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-[#F5F7FA]">
       <Head>
-        <title>Mano Būstelis Pagalbininkas</title>
-        <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su Mano Būstas paslaugomis" />
+        <title>Projektų Žvalgas Pagalbininkas</title>
+        <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su viešųjų pirkimų projektais" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <header className="bg-white shadow-sm py-3 sticky top-0 z-10">
+      {/* Fixed height header */}
+      <header className="bg-[#1A3A5E] text-white shadow-md py-3 z-10 h-[60px]">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
           <h1 className="text-xl font-bold">
-            <span className="text-[#8bc53f]">Mano</span>
-            <span className="text-[#1a365d]"> BŪSTELIS</span>
-            <span className="text-[#1a365d] ml-2">Pagalbininkas</span>
+            <span className="text-[#FFB703]">PROJEKTŲ </span>
+            <span className="text-white"> ŽVALGAS</span>
+            <span className="text-white ml-2">Pagalbininkas</span>
           </h1>
           <div className="flex items-center mb-4 md:mb-0">
-            <ModelSelector 
-              selectedModel={selectedModel}
-              onModelSelect={setSelectedModel}
-            />
-            {/* Add toggle button for sidebar */}
+            {/* No model selector, just display the model name */}
+            <div className="bg-white rounded px-3 py-1 text-black text-sm">
+              <span className="font-medium text-[#1A3A5E]">Llama 4 Scout</span>
+            </div>
             <button 
               onClick={() => setShowSidebar(!showSidebar)}
-              className="ml-2 px-3 py-1 bg-[#e9f3d9] text-[#1a365d] rounded text-sm hover:bg-[#d5eabc] transition"
+              className="ml-2 px-3 py-1 bg-[#2D6A4F] text-white rounded text-sm hover:bg-[#1B4332] transition"
             >
               {showSidebar ? 'Slėpti dokumentus' : 'Rodyti dokumentus'}
             </button>
@@ -221,7 +225,7 @@ export default function Chat() {
                   alert(`Test failed: ${error}`);
                 }
               }}
-              className="ml-2 px-3 py-1 bg-[#e9f3d9] text-[#1a365d] rounded text-sm hover:bg-[#d5eabc] transition"
+              className="ml-2 px-3 py-1 bg-[#F4A261] text-[#1A3A5E] font-medium rounded text-sm hover:bg-[#FFB703] transition"
             >
               Testuoti Ryšį
             </button>
@@ -229,56 +233,62 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* Update main layout to include sidebar */}
-      <main className="flex-grow container mx-auto px-4 md:px-6 py-6 flex flex-row gap-4">
-        {/* Sidebar - only shown if showSidebar is true */}
+      {/* Main content area - exact calculation to match footer */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - stretches to footer */}
         {showSidebar && (
-          <div className="hidden md:block md:w-1/4 lg:w-1/5">
+          <div className="hidden md:block md:w-1/4 lg:w-1/5 border-r border-gray-200 bg-white overflow-hidden">
             <DocumentSidebar 
               documents={summaryDocuments} 
               onDocumentClick={handleDocumentClick} 
+              expandable={true}
             />
           </div>
         )}
         
-        {/* Chat area with adjusted width */}
-        <div className={`flex-grow flex flex-col ${showSidebar ? 'md:w-3/4 lg:w-4/5' : 'w-full'}`}>
-          <div className="flex-grow bg-white rounded-lg shadow-md p-4 md:p-6 mb-4 overflow-y-auto h-[calc(100vh-260px)]">
+        {/* Main content with chat and input */}
+        <div className="flex-grow flex flex-col">
+          {/* Chat messages area - takes most of the space */}
+          <div className="flex-grow overflow-y-auto bg-white mb-1 border border-gray-100">
             <ChatBox messages={messages} />
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-            <div className="relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Klauskite apie Mano Būstas duomenis, tokius kaip: kvietimai, skelbimai ir kt."
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#8bc53f] resize-none min-h-[50px] max-h-[150px] pr-[90px]"
-                disabled={isLoading}
-                rows={1}
-              />
-              <button
-                type="submit"
-                className="absolute right-2 bottom-2 bg-[#8bc53f] text-white px-4 py-1.5 rounded-lg hover:bg-[#79af32] transition disabled:opacity-50 font-medium text-sm"
-                disabled={isLoading || !input.trim()}
-              >
-                {isLoading ? 'Thinking...' : 'Send'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 text-right mt-1">
-              Press Enter to send, Shift+Enter for new line
-            </p>
-          </form>
+          {/* Input area - positioned right above footer */}
+          <div className="border-t border-gray-200 pt-2 pb-2 px-4 bg-white">
+            <form onSubmit={handleSubmit}>
+              <div className="relative">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Klauskite apie projektus, kvietimus, skelbinius ir kitus duomenis..."
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#2D6A4F] resize-none min-h-[40px] max-h-[80px] pr-[90px]"
+                  disabled={isLoading}
+                  rows={1}
+                />
+                <button
+                  type="submit"
+                  className="absolute right-2 bottom-2 bg-[#F4A261] text-[#1A3A5E] font-medium px-4 py-1.5 rounded-lg hover:bg-[#FFB703] transition disabled:opacity-50"
+                  disabled={isLoading || !input.trim()}
+                >
+                  {isLoading ? 'Galvoju...' : 'Siųsti'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 text-right mt-1">
+                Enter - siųsti, Shift+Enter - nauja eilutė
+              </p>
+            </form>
+          </div>
         </div>
-      </main>
+      </div>
 
-      <footer className="bg-white py-4 border-t mt-auto">
-        <div className="container mx-auto px-4 md:px-6 text-center text-gray-500 text-sm">
-          <p>© {new Date().getFullYear()} Mano Būstelis Pagalbininkas — Patogus būdas sužinoti informacija greitai</p>
-          <p className="text-xs mt-1">Suteikia informacija iš Mano Būstas duomenų</p>
+      {/* Footer - fixed height */}
+      <footer className="bg-[#1A3A5E] text-white py-4">
+        <div className="container mx-auto px-4 md:px-6 text-center text-sm">
+          <p>© {new Date().getFullYear()} Projektų Žvalgas Pagalbininkas — Patogus būdas sužinoti informacija greitai</p>
+          <p className="text-xs mt-1 text-gray-300">Suteikia informacija iš statybos konkursu duombazės</p>
         </div>
       </footer>
     </div>
