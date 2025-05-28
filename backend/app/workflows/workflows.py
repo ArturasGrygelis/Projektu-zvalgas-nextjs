@@ -125,7 +125,7 @@ def create_minimal_workflow(full_vectorstore, summaries_vectorstore,  k_sum, sea
         decomposed_documents: dict[str, List[str]] 
         processed_question: Annotated[str, "Single"]
         sub_questions : List[str]
-        documents_uuids: List[str]
+        document_uuids: List[str]
         
 
     

@@ -30,7 +30,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: 'system', 
-      content: 'Sveiki atvyke, aš esu darbo asistentas. Kaip galiu jums padėti? /n Prisiminkite, aš esu virtualus asistentas, galiu kartais suklysti, sprendimus priimkite naudodami savo kritinį mąstymą.',
+      content: 'Sveiki atvyke, Mano Būstas asistentas. Kaip galiu jums padėti? /n Prisiminkite, aš esu virtualus asistentas, galiu kartais suklysti.',
       timestamp: new Date()
     }
 
@@ -169,14 +169,14 @@ export default function Chat() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Head>
-        <title>Darbo Asistentas </title>
+        <title>Mano Būstas  Asistentas </title>
         <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su  Lietuvos darbo teisę " />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <header className="bg-white shadow-sm py-3 sticky top-0 z-10">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
-          <h1 className="text-xl font-bold text-brown-700">Darbo Asistentas</h1>
+          <h1 className="text-xl font-bold text-brown-700">Mano Būstas Pagalbininkas</h1>
           <div className="flex items-center mb-4">
             <ModelSelector 
               selectedModel={selectedModel}
@@ -218,7 +218,7 @@ export default function Chat() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Klauskite apie darbo teisę ar įstatymus..."
+              placeholder="Klauskite apie Mano Būstas duomenis , tokius kaip: kvietimai , skelbimai ir kt."
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-brown-500 resize-none min-h-[50px] max-h-[150px] pr-[90px]"
               disabled={isLoading}
               rows={1}
@@ -239,8 +239,8 @@ export default function Chat() {
 
       <footer className="bg-white py-4 border-t mt-auto">
         <div className="container mx-auto px-4 md:px-6 text-center text-gray-500 text-sm">
-          <p>© {new Date().getFullYear()} Darbo Asistentas — Your Lithuanian Labor Law Assistant</p>
-          <p className="text-xs mt-1">Provides information about Lithuanian labor law and employment regulations</p>
+          <p>© {new Date().getFullYear()} Mano Būstas Asistentas — Patogus būdas sužinoti informacija greitai</p>
+          <p className="text-xs mt-1">Suteikia informacija iš Mano Būstas duomenų</p>
         </div>
       </footer>
     </div>

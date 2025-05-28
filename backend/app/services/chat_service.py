@@ -32,7 +32,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
             search_type="similarity",
             generator_name=model_name,
             generator_temperature=0.1,
-            helper_name="meta-llama/llama-4-scout-17b-16e-instruct",
+            helper_name="gemma2-9b-it",
             helper_temperature=0.1
         )
         

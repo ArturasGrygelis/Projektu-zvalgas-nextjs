@@ -54,3 +54,5 @@ async def health_check():
         "vectorstore_initialized": vectorstore is not None,
         "vectorstore_count": vectorstore._collection.count() if vectorstore else 0
     }
+
+#
