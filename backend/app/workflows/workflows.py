@@ -127,6 +127,7 @@ def create_minimal_workflow(full_vectorstore, summaries_vectorstore,  k_sum, sea
         processed_question: Annotated[str, "Single"]
         sub_questions : List[str]
         document_uuids: List[str]
+        full_documents: List[str]
         
 
     
@@ -4591,7 +4592,7 @@ def retrieve_full_documents(state, full_vectorstore):
     logger.info(f"Retrieved {len(retrieved_docs)} documents by UUID")
     
     return {
-        "documents": retrieved_docs,
+        "full_documents": retrieved_docs,
         "steps": steps
     }
 def retrieve(state, vectorstore, k, search_type):
@@ -4738,7 +4739,7 @@ def generate(state,QA_chain):
     Generate answer
     """
     question = state["question"]
-    documents = state["documents"]
+    documents = state["full_documents"] 
     generation = QA_chain.invoke({"documents": documents, "question": question})
     steps = state["steps"]
     steps.append("generate_answer")

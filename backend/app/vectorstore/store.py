@@ -43,7 +43,7 @@ class VectorStore:
 
     def _load_stores(self):
         """Load both summary and full article vector stores"""
-        # Load summary store (using your existing working docs/chroma path)
+        # Load summary store
         try:
             if os.path.exists(self.summary_store_path) and os.listdir(self.summary_store_path):
                 logger.info(f"Loading summary vector store from {self.summary_store_path}")
@@ -59,20 +59,19 @@ class VectorStore:
         except Exception as e:
             logger.error(f"Error loading summary vector store: {str(e)}", exc_info=True)
             self.summary_store = None
-        
-        # Since you're testing, let's use the existing store as both summary and full for now
-        # Load full articles store (for now, use the same as summary)
+    
+        # Load full articles store - USING THE CORRECT PATH
         try:
-            if os.path.exists(self.summary_store_path) and os.listdir(self.summary_store_path):
-                logger.info(f"Loading full articles vector store from {self.summary_store_path} (same as summary for testing)")
+            if os.path.exists(self.full_store_path) and os.listdir(self.full_store_path):
+                logger.info(f"Loading full articles vector store from {self.full_store_path}")
                 self.full_store = Chroma(
-                    persist_directory=self.summary_store_path,  # Use same path for testing
+                    persist_directory=self.full_store_path,  # Using full_store_path now!
                     embedding_function=self.embeddings
                 )
                 count = self.full_store._collection.count()
                 logger.info(f"Successfully loaded full articles store with {count} documents")
             else:
-                logger.warning(f"Full articles vector store path does not exist, using None")
+                logger.warning(f"Full articles vector store path does not exist: {self.full_store_path}")
                 self.full_store = None
         except Exception as e:
             logger.error(f"Error loading full articles vector store: {str(e)}", exc_info=True)
