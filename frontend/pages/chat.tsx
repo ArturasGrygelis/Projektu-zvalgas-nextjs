@@ -3,6 +3,7 @@ import Head from 'next/head';
 import axios from 'axios';
 import ModelSelector from '../components/ModelSelector';
 import ChatBox from '../components/Chatbox';
+import DocumentSidebar from '../components/DocumentSidebar'; // Add this import
 
 // Define the source structure matching the backend
 interface SourceDoc {
@@ -10,12 +11,13 @@ interface SourceDoc {
   metadata: Record<string, any>; // Or define more specific metadata types if known
 }
 
-// Update ChatApiResponse
+// Update ChatApiResponse to include summary_documents
 interface ChatApiResponse {
   message: string;
   conversation_id: string;
   created_at: string;
   sources?: SourceDoc[]; // Add optional sources array
+  summary_documents?: SourceDoc[]; // Add this field for sidebar documents
 }
 
 // Update Message type
@@ -27,6 +29,10 @@ type Message = {
 };
 
 export default function Chat() {
+  // Add state for summary documents and sidebar visibility
+  const [summaryDocuments, setSummaryDocuments] = useState<SourceDoc[]>([]);
+  const [showSidebar, setShowSidebar] = useState<boolean>(true);
+  
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: 'system', 
@@ -36,7 +42,7 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>("meta-llama/llama-4-maverick-17b-128e-instruct");
+  const [selectedModel, setSelectedModel] = useState<string>("meta-llama/llama-4-scout-17b-16e-instruct");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -53,6 +59,15 @@ export default function Chat() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Handle document click in sidebar
+  const handleDocumentClick = (doc: SourceDoc) => {
+    const docName = doc.metadata.Dokumento_pavadinimas || 
+                   doc.metadata.dokumento_pavadinimas || 
+                   "šį dokumentą";
+    setInput(`Papasakok apie: ${docName}`);
+    inputRef.current?.focus();
+  };
 
   // Handle input height adjustment for textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -95,12 +110,11 @@ export default function Chat() {
       }, {
         // Increase the timeout (e.g., to 90 seconds or 120 seconds)
         timeout: 120000 // 90 seconds (90,000 milliseconds)
-        // timeout: 120000 // 120 seconds (120,000 milliseconds)
       });
 
       console.log("Response received:", response.data);
 
-      // --- 2. Safer Timestamp Parsing & State Update ---
+      // --- Safer Timestamp Parsing & State Update ---
       let responseTimestamp = new Date(); // Default to now
       try {
         // Attempt to parse the timestamp from the response
@@ -127,14 +141,17 @@ export default function Chat() {
           sources: response.data.sources     // Store the sources
         }
       ]);
-      // --- End of Changes ---
 
-      setInput(''); // Clear input field
+      // Update summary documents if they exist in the response
+      if (response.data.summary_documents && response.data.summary_documents.length > 0) {
+        console.log("Updating sidebar with summary documents:", response.data.summary_documents.length);
+        setSummaryDocuments(response.data.summary_documents);
+      }
 
     } catch (error) {
       console.error('Error fetching response:', error);
 
-      // --- 3. Improved Error Message Display ---
+      // --- Improved Error Message Display ---
       const errorMessage = axios.isAxiosError(error)
         ? `Error: ${error.response?.data?.detail || error.message}`
         : `Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -147,7 +164,6 @@ export default function Chat() {
           timestamp: new Date()
         }
       ]);
-      // --- End of Changes ---
 
     } finally {
       setIsLoading(false);
@@ -166,7 +182,7 @@ export default function Chat() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Head>
-        <title>Mano Būstas Asistentas</title>
+        <title>Mano Būstelis Pagalbininkas</title>
         <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su Mano Būstas paslaugomis" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -183,6 +199,13 @@ export default function Chat() {
               selectedModel={selectedModel}
               onModelSelect={setSelectedModel}
             />
+            {/* Add toggle button for sidebar */}
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="ml-2 px-3 py-1 bg-[#e9f3d9] text-[#1a365d] rounded text-sm hover:bg-[#d5eabc] transition"
+            >
+              {showSidebar ? 'Slėpti dokumentus' : 'Rodyti dokumentus'}
+            </button>
             <button 
               onClick={async () => {
                 try {
@@ -206,41 +229,55 @@ export default function Chat() {
         </div>
       </header>
 
-      <main className="flex-grow container mx-auto px-4 md:px-6 py-6 flex flex-col max-w-5xl">
-        <div className="flex-grow bg-white rounded-lg shadow-md p-4 md:p-6 mb-4 overflow-y-auto h-[calc(100vh-260px)]">
-          <ChatBox messages={messages} />
-          <div ref={messagesEndRef} />
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-          <div className="relative">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Klauskite apie Mano Būstas duomenis, tokius kaip: kvietimai, skelbimai ir kt."
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#8bc53f] resize-none min-h-[50px] max-h-[150px] pr-[90px]"
-              disabled={isLoading}
-              rows={1}
+      {/* Update main layout to include sidebar */}
+      <main className="flex-grow container mx-auto px-4 md:px-6 py-6 flex flex-row gap-4">
+        {/* Sidebar - only shown if showSidebar is true */}
+        {showSidebar && (
+          <div className="hidden md:block md:w-1/4 lg:w-1/5">
+            <DocumentSidebar 
+              documents={summaryDocuments} 
+              onDocumentClick={handleDocumentClick} 
             />
-            <button
-              type="submit"
-              className="absolute right-2 bottom-2 bg-[#8bc53f] text-white px-4 py-1.5 rounded-lg hover:bg-[#79af32] transition disabled:opacity-50 font-medium text-sm"
-              disabled={isLoading || !input.trim()}
-            >
-              {isLoading ? 'Thinking...' : 'Send'}
-            </button>
           </div>
-          <p className="text-xs text-gray-500 text-right mt-1">
-            Press Enter to send, Shift+Enter for new line
-          </p>
-        </form>
+        )}
+        
+        {/* Chat area with adjusted width */}
+        <div className={`flex-grow flex flex-col ${showSidebar ? 'md:w-3/4 lg:w-4/5' : 'w-full'}`}>
+          <div className="flex-grow bg-white rounded-lg shadow-md p-4 md:p-6 mb-4 overflow-y-auto h-[calc(100vh-260px)]">
+            <ChatBox messages={messages} />
+            <div ref={messagesEndRef} />
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Klauskite apie Mano Būstas duomenis, tokius kaip: kvietimai, skelbimai ir kt."
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#8bc53f] resize-none min-h-[50px] max-h-[150px] pr-[90px]"
+                disabled={isLoading}
+                rows={1}
+              />
+              <button
+                type="submit"
+                className="absolute right-2 bottom-2 bg-[#8bc53f] text-white px-4 py-1.5 rounded-lg hover:bg-[#79af32] transition disabled:opacity-50 font-medium text-sm"
+                disabled={isLoading || !input.trim()}
+              >
+                {isLoading ? 'Thinking...' : 'Send'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 text-right mt-1">
+              Press Enter to send, Shift+Enter for new line
+            </p>
+          </form>
+        </div>
       </main>
 
       <footer className="bg-white py-4 border-t mt-auto">
         <div className="container mx-auto px-4 md:px-6 text-center text-gray-500 text-sm">
-          <p>© {new Date().getFullYear()} Mano Būstas Asistentas — Patogus būdas sužinoti informacija greitai</p>
+          <p>© {new Date().getFullYear()} Mano Būstelis Pagalbininkas — Patogus būdas sužinoti informacija greitai</p>
           <p className="text-xs mt-1">Suteikia informacija iš Mano Būstas duomenų</p>
         </div>
       </footer>
