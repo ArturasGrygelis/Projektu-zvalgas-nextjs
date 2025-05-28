@@ -31,7 +31,8 @@ from exa_py import Exa
 from dotenv import load_dotenv
 from langchain_core.documents import Document
 import logging
-
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 logger = logging.getLogger(__name__)
 
 
@@ -166,7 +167,11 @@ def create_minimal_workflow(full_vectorstore, summaries_vectorstore,  k_sum, sea
     #workflow.add_node("process_question_for_chroma", lambda state : process_question_for_chroma (state,llm_question_enricher))
     #workflow.add_node("decompose_question", lambda state : decompose_question (state,llm_question_enricher))
     workflow.add_node("retrieve_summaries", lambda state: retrieve_summaries(state, summaries_vectorstore,k_sum, search_type))
-    workflow.add_node("grade_summary_documents", lambda state: grade_summary_documents(state, retrieval_grader_grader(llm_checker)))
+    workflow.add_node(
+    "grade_summary_documents",
+    lambda state: grade_summary_documents(state, retrieval_grader_grader(llm_checker))
+)
+
     workflow.add_node("retrieve_full_documents", lambda state: retrieve_full_documents(state, full_vectorstore))
     #workflow.add_node("grade_documents", lambda state: grade_documents(state, retrieval_grader_grader(llm_checker)))
     workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
@@ -1730,11 +1735,11 @@ def check_chit_chat(state, llm):
     
     # For more complex classification, use a simpler prompt approach
     prompt = PromptTemplate(
-        template="""You are an expert classifier. Your task is to determine if a user's query is simple chit-chat or a substantive question.
+        template="""Jūs esate ekspertas klausimo klasifikavime. Jūsų užduotis yra nustatyti, ar vartotojo užklausa yra paprastas pokalbis, ar esminis klausimas.
 
-Chit-chat includes greetings (like hi, hello, labas, sveiki), simple pleasantries (like how are you?, kaip sekasi?), and other non-work-related small talk.
+Pokalbiai apima sveikinimus (pvz., labas, labas, sveiki), paprastus pasilinksminimus (kaip sekasi?, kaip sekasi?) ir kitus su darbu nesusijusius pokalbius.
 
-Substantive questions are those asking about work rights, labor law, or specific employment situations.
+Esminiai klausimai yra tie, kurie klausia apie darbus, projektus, kvietumus  ar konkrečias darbo situacijas
 
 User query: {question}
 
@@ -2269,6 +2274,12 @@ def retrieve_summaries(state, summaries_vectorstore, k, search_type):
             "documents": documents,
             "steps": steps
         }
+
+
+def grade_summary_documents_sync(state, retrieval_grader):
+    """Synchronous wrapper for the async function"""
+    return asyncio.run(grade_summary_documents(state, retrieval_grader)) 
+
 
 
 def generate(state,QA_chain):
@@ -4813,6 +4824,7 @@ def grade_documents(state, retrieval_grader):
 def grade_summary_documents(state, retrieval_grader):
     """
     Grade summary documents and return UUIDs of relevant documents for later retrieval
+    Using ThreadPoolExecutor for concurrent document processing
     """
     question = state["question"]
     documents = state["documents"]
@@ -4823,48 +4835,67 @@ def grade_summary_documents(state, retrieval_grader):
     filtered_doc_uuids = []  # Store UUIDs instead of full documents
     search = "No"
     
-    if decomposed_documents is None:
-        for d in documents:
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": question, "documents": d})
+    def process_single_document(q, doc):
+        """Helper function to grade a single document"""
+        try:
+            # Call the grading function (synchronous version)
+            score = retrieval_grader.invoke({"question": q, "documents": doc})
             logger.info(f"Grader output for document: {score}")
             
             # Extract the grade
             grade = getattr(score, 'binary_score', None)
             if grade and grade.lower() in ["yes", "true", "1", 'taip']:
                 # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
+                doc_uuid = doc.metadata.get('uuid')
                 if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
+                    return doc_uuid
                 else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+                    logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                    return None
+            return None
+        except Exception as e:
+            logger.error(f"Error grading document: {e}")
+            return None
+    
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        if decomposed_documents is None:
+            # Submit all documents for concurrent processing
+            future_to_doc = {
+                executor.submit(process_single_document, question, doc): doc
+                for doc in documents
+            }
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
+            
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
                 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
-    
-    else:
-        # Handle decomposed documents (dictionary with question-document pairs)
-        for q, d in decomposed_documents.items():
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": q, "documents": d})
-            logger.info(f"Grader output for question '{q}' and document: {score}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
+        
+        else:
+            # Handle decomposed documents (dictionary with question-document pairs)
+            future_to_doc = {
+                executor.submit(process_single_document, q, d): d
+                for q, d in decomposed_documents.items()
+            }
             
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
+            
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
 
     return {
         "document_uuids": filtered_doc_uuids,  # Return UUIDs instead of full documents
