@@ -23,7 +23,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         if full_vectorstore is None:
             raise ValueError("Full vector store not initialized properly")
         # Create workflow
-        model_name = getattr(request, 'model_name', "meta-llama/llama-4-maverick-17b-128e-instruct")
+        model_name = getattr(request, 'model_name', "meta-llama/llama-4-scout-17b-16e-instruct")
         
         workflow = create_minimal_workflow(
             summaries_vectorstore=summaries_vectorstore,
@@ -32,7 +32,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
             search_type="similarity",
             generator_name=model_name,
             generator_temperature=0.0,
-            helper_name="gemma2-9b-it",
+            helper_name="meta-llama/llama-4-scout-17b-16e-instruct",
             helper_temperature=0.0
         )
         
@@ -50,8 +50,17 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         
         # Format sources
         formatted_sources = None
-        if final_state.get("documents"):
+        if final_state.get("full_documents"):
             formatted_sources = [
+                SourceDocument(
+                    page_content=doc.page_content,
+                    metadata=doc.metadata or {}
+                ) for doc in final_state["full_documents"]
+            ]
+        
+        summary_documents = None
+        if final_state.get("documents"):  # These are summary documents
+            summary_documents = [
                 SourceDocument(
                     page_content=doc.page_content,
                     metadata=doc.metadata or {}
@@ -62,7 +71,8 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
             message=response_text,
             conversation_id=conversation_id,
             created_at=datetime.now(),
-            sources=formatted_sources
+            sources=formatted_sources,
+            summary_documents=summary_documents  # Add new field for sidebar
         )
         
     except Exception as e:

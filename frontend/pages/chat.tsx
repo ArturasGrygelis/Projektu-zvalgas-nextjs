@@ -175,7 +175,7 @@ export default function Chat() {
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
           <h1 className="text-xl font-bold">
             <span className="text-[#8bc53f]">Mano</span>
-            <span className="text-[#1a365d]">BŪSTAS</span>
+            <span className="text-[#1a365d]"> BŪSTELIS</span>
             <span className="text-[#1a365d] ml-2">Pagalbininkas</span>
           </h1>
           <div className="flex items-center mb-4 md:mb-0">
@@ -200,7 +200,7 @@ export default function Chat() {
               }}
               className="ml-2 px-3 py-1 bg-[#e9f3d9] text-[#1a365d] rounded text-sm hover:bg-[#d5eabc] transition"
             >
-              Test Connection
+              Testuoti Ryšį
             </button>
           </div>
         </div>

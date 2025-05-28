@@ -48,8 +48,13 @@ const MessageItem: React.FC<{ message: Message }> = ({ message }) => {
 
   // Function to get a display name for the source (customize as needed)
   const getSourceName = (metadata: Record<string, any>, index: number): string => {
-    return metadata.title || metadata.source || metadata.file_path || `Source ${index + 1}`;
-  };
+  return metadata.Dokumento_pavadinimas || 
+         metadata.dokumento_pavadinimas || 
+         metadata.title || 
+         metadata.source || 
+         metadata.file_path || 
+         `Šaltinis ${index + 1}`;
+};
 
   return (
     <div className={`p-3 rounded-lg max-w-xl ${

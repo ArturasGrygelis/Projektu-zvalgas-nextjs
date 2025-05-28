@@ -26,8 +26,9 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     conversation_id: str
-    created_at: datetime = Field(default_factory=datetime.now)
-    sources: Optional[List[SourceDocument]] = None 
+    created_at: datetime
+    sources: Optional[List[SourceDocument]] = None
+    summary_documents: Optional[List[SourceDocument]] = None  # Add this new field 
 
 # Payment related models
 class StripeWebhookEvent(BaseModel):

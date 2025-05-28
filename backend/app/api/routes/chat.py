@@ -31,7 +31,7 @@ async def list_models():
     logger.info("Models endpoint called")
     
     models = [
-        {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "name": "LLaMA-4 Maverick (17B)"},
+        
         {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "name": "LLaMA-4 Scout (17B)"}
     ]
     

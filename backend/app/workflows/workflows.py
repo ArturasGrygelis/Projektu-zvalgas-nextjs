@@ -209,459 +209,6 @@ def create_minimal_workflow(full_vectorstore, summaries_vectorstore,  k_sum, sea
 
     return custom_graph
 
-from langchain_core.prompts import PromptTemplate
-from pydantic import BaseModel, Field
-
-def create_only_asnwer_checker_workflow(vectorstore, k, search_type,generator_name, generator_temperature, helper_name, helper_temperature):
-    class GraphState(TypedDict):
-        """
-        Represents the state of our graph.
-        Attributes:
-            question: question
-            generation: LLM generation
-            search: whether to add search
-            documents: list of documents
-            steps: List[str]
-            generation_count: int
-        """
-        question: Annotated[str, "Single"]
-        
-        generation: str
-        search: str
-        documents: List[str]
-        steps: List[str]
-        generation_count: int
-        
-        
-
-    
-    llm = ChatGroq(
-        model=generator_name,  
-        temperature=generator_temperature,
-        max_tokens=1200,
-        max_retries=3,
-
-        )
-    
-
-
-
-        
-
-    
-
-
-    workflow = StateGraph(GraphState)
-
-    # Define the nodes
-    workflow.add_node("ask_question", lambda state: ask_question(state))
-    
-    workflow.add_node("retrieve", lambda state: retrieve(state, vectorstore,k, search_type))
-    
-    workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
-    #workflow.add_node("grade_documents", lambda state: grade_documents(state, retrieval_grader_grader(llm_checker)))
-    workflow.add_node("web_search", web_search)
-    workflow.add_node("transform_query", lambda state: transform_query(state, create_question_rewriter(llm)))
-
-    # Build graph
-    workflow.set_entry_point("ask_question")
-   
-    
-    
-    workflow.add_edge("ask_question", "retrieve")
-    
-
-    
-
-    
-    workflow.add_edge("retrieve", "generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        lambda state: grade_generation_v_documents_and_question(state, create_hallucination_checker(llm)),
-        {
-            "retry": "generate",
-            "useful": END,
-            "transform query": "transform_query",
-        },
-    )
-
-
-    
-   
-
-    
-    
-    workflow.add_edge("transform_query", "retrieve")
-
-    workflow.add_edge("web_search", "generate")
-    workflow.add_edge("generate", END)
-    
-   
-    
-    
-
-
-    custom_graph = workflow.compile()
-
-    return custom_graph
-
-
-
-def create_only_decomposition_workflow(full_vectorstore, summaries_vectorstore, k, k_sum, search_type, generator_name, generator_temperature, helper_name, helper_temperature):
-    
-    class GraphState(TypedDict):
-        """
-        Represents the state of our graph.
-        Attributes:
-            question: question
-            generation: LLM generation
-            search: whether to add search
-            documents: list of documents
-            generations_count : generations count
-        """
-        question: Annotated[str, "Single"]
-        questions: Annotated[List[str], "Multiple"]  # Ensuring only one value per step
-        generation: str
-        search: str
-        documents: List[str]
-        steps: List[str]
-        generation_count: int
-        decomposed_documents: dict[str, List[str]] 
-        processed_question: Annotated[str, "Single"]
-        sub_questions : List[str]
-        documents_uuids: List[str]
-        
-
-    
-    llm = ChatGroq(
-            model=generator_name,  
-           temperature=generator_temperature,
-            max_tokens=1000,
-            max_retries=3,
-
-        )
-    llm_checker = ChatGroq(
-            model=helper_name,
-            temperature=helper_temperature,
-            max_tokens=400,
-            max_retries=3,
-       )
-
-    llm_question_enricher = ChatGroq(
-            model=helper_name,
-            temperature=helper_temperature,
-            max_tokens=400,
-            max_retries=3,
-       )   
-
-
-
-        
-
-    
-
-
-    workflow = StateGraph(GraphState)
-    
-    # Define the nodes
-    workflow.add_node("ask_question", lambda state: ask_question(state))
-    workflow.add_node("process_question_for_chroma", lambda state : process_question_for_chroma (state,llm_question_enricher))
-    workflow.add_node("decompose_question", lambda state : decompose_question (state,llm_question_enricher))
-    workflow.add_node("retrieve_summaries", lambda state: retrieve_summaries(state, summaries_vectorstore,k_sum, search_type))
-    workflow.add_node("grade_summary_documents", lambda state: grade_summary_documents(state, llm_checker))
-    workflow.add_node("retrieve", lambda state: retrieve(state, full_vectorstore,k, search_type))
-    workflow.add_node("grade_documents", lambda state: grade_documents(state, llm_checker))
-    workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
-    
-    workflow.add_node("transform_query", lambda state: transform_query(state, create_question_rewriter(llm)))
-
-    # Build graph
-    workflow.set_entry_point("ask_question")
-   
-    
-    workflow.add_conditional_edges(
-        "ask_question",
-        lambda state: decomposition_checker(state, llm_checker),
-        {
-            "True": "decompose_question",
-            "False": "process_question_for_chroma",
-        
-        },
-    )
-    workflow.add_edge("process_question_for_chroma", "retrieve_summaries")
-    workflow.add_edge("decompose_question", "retrieve_summaries")
-    
-
-    
-    workflow.add_edge("retrieve_summaries", "grade_summary_documents")
-    workflow.add_edge("grade_summary_documents", "retrieve")
-    workflow.add_edge("retrieve", "grade_documents")
-    workflow.add_edge("grade_documents", "generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        lambda state: grade_generation_v_documents_and_question(state, create_hallucination_checker(llm)),
-        {
-            "retry": "generate",
-            "useful": END,
-            "transform query": "transform_query",
-        },
-    )
-    
-    
-    workflow.add_conditional_edges(
-        "transform",
-        lambda state: decomposition_checker(state, llm_checker),
-        {
-            "True": "decompose_question",
-            "False": "process_question_for_chroma",
-        
-        },
-    )
-    
-    
-    
-   
-    
-    
-
-
-    custom_graph = workflow.compile()
-
-    return custom_graph
-
-
-def create_only_question_rewrite_workflow(vectorstore, k, search_type):
-    pass
-
-def create_full_with_transformation_at_end_workflow(vectorstore, k, search_type,generator_name, generator_temperature, helper_name, helper_temperature):
-    class GraphState(TypedDict):
-        """
-        Represents the state of our graph.
-        Attributes:
-            question: question
-            generation: LLM generation
-            search: whether to add search
-            documents: list of documents
-            generations_count : generations count
-        """
-        question: Annotated[str, "Single"]
-        questions: Annotated[List[str], "Multiple"]  # Ensuring only one value per step
-        generation: str
-        search: str
-        documents: List[str]
-        steps: List[str]
-        generation_count: int
-        decomposed_documents: dict[str, List[str]] 
-        processed_question: Annotated[str, "Single"]
-        sub_questions : List[str]
-        
-
-    
-    llm = ChatGroq(
-            model=generator_name,  
-           temperature=generator_temperature,
-            max_tokens=600,
-            max_retries=3,
-
-        )
-    llm_checker = ChatGroq(
-            model=helper_name,
-            temperature=helper_temperature,
-            max_tokens=400,
-            max_retries=3,
-       )
-
-    llm_question_enricher = ChatGroq(
-            model=helper_name,
-            temperature=helper_temperature,
-            max_tokens=400,
-            max_retries=3,
-       )   
-
-
-
-        
-
-    
-
-
-    workflow = StateGraph(GraphState)
-    # Define the nodes
-    workflow.add_node("ask_question", lambda state: ask_question(state))
-    workflow.add_node("process_question_for_chroma", lambda state : process_question_for_chroma (state,llm_question_enricher))
-    workflow.add_node("decompose_question", lambda state : decompose_question (state,llm_question_enricher))
-    workflow.add_node("retrieve", lambda state: retrieve(state, vectorstore,k, search_type))
-    workflow.add_node("grade_documents", lambda state: grade_documents(state, retrieval_grader_grader(llm_checker)))
-    workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
-    workflow.add_node("web_search", web_search)
-    workflow.add_node("transform_query", lambda state: transform_query(state, create_question_rewriter(llm)))
-
-    # Build graph
-    workflow.set_entry_point("ask_question")
-   
-    
-    workflow.add_conditional_edges(
-        "ask_question",
-        lambda state: decomposition_checker(state, llm_checker),
-        {
-            "True": "decompose_question",
-            "False": "process_question_for_chroma",
-        
-        },
-    )
-    workflow.add_edge("process_question_for_chroma", "retrieve")
-    workflow.add_edge("decompose_question", "retrieve")
-    
-
-    
-    workflow.add_edge("retrieve", "grade_documents")
-    
-    
-
-    workflow.add_conditional_edges(
-        "grade_documents",
-        decide_to_generate,
-        {
-            "search": "web_search",
-            "generate": "generate",
-        
-        },
-    )
-
-    workflow.add_edge("web_search", "generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        lambda state: grade_generation_v_documents_and_question(state, create_hallucination_checker(llm)),
-        {
-            "retry": "generate",
-            "useful": END,
-            "transform query": "transform_query",
-        },
-    )
-    
-   
-    workflow.add_edge("web_search", "generate")
-    workflow.add_conditional_edges(
-        "transform_query",
-        lambda state: decomposition_checker(state, llm_checker),
-        {
-            "True": "decompose_question",
-            "False": "process_question_for_chroma",
-        
-        },
-    )
-    workflow.add_edge("process_question_for_chroma", "retrieve")
-    workflow.add_edge("decompose_question", "retrieve")
-   
-    workflow.add_edge("generate", END)
-    
-   
-    
-    
-
-
-    custom_graph = workflow.compile()
-
-    return custom_graph
-
-
-def create_websearch_workflow(vectorstore, k, search_type,generator_name, generator_temperature, helper_name, helper_temperature):
-    class GraphState(TypedDict):
-        """
-        Represents the state of our graph.
-        Attributes:
-            question: question
-            generation: LLM generation
-            search: whether to add search
-            documents: list of documents
-            generations_count : generations count
-        """
-        question: Annotated[str, "Single"]
-        questions: Annotated[List[str], "Multiple"]  # Ensuring only one value per step
-        generation: str
-        search: str
-        documents: List[str]
-        steps: List[str]
-        generation_count: int
-        decomposed_documents: dict[str, List[str]] 
-        processed_question: Annotated[str, "Single"]
-        sub_questions : List[str]
-        
-
-    
-    llm = ChatGroq(
-            model=generator_name,  
-           temperature=generator_temperature,
-            max_tokens=600,
-            max_retries=3,
-
-        )
-    
-    llm_checker = ChatGroq(
-            model=helper_name,
-            temperature=helper_temperature,
-            max_tokens=400,
-            max_retries=3,
-       )
-
-
-        
-
-    
-
-
-    workflow = StateGraph(GraphState)
-
-    # Define the nodes
-    workflow.add_node("ask_question", lambda state: ask_question(state))
-    
-    workflow.add_node("retrieve", lambda state: retrieve(state, vectorstore,k, search_type))
-    workflow.add_node("grade_documents", lambda state: grade_documents(state, retrieval_grader_grader(llm_checker)))
-    workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
-    workflow.add_node("web_search", web_search)
-    workflow.add_node("transform_query", lambda state: transform_query(state, create_question_rewriter(llm)))
-
-    # Build graph
-    workflow.set_entry_point("ask_question")
-   
-    
-    
-    workflow.add_edge("ask_question", "retrieve")
-    workflow.add_edge("retrieve", "grade_documents")
-    workflow.add_conditional_edges(
-        "grade_documents",
-        decide_to_generate,
-        {
-            "search": "web_search",
-            "generate": "generate",
-        
-        },
-    )
-    
-    
-
-    
-    
-    
-   
-
-    
-    
-   
-    workflow.add_edge("web_search", "generate")
-    workflow.add_edge("generate", END)
-    
-   
-    
-    
-
-
-    custom_graph = workflow.compile()
-
-    return custom_graph
 
 
 
@@ -1199,16 +746,16 @@ def QA_chain(llm):
     """
     # Define the prompt template
     prompt = PromptTemplate(
-        template="""Esi teisės asistentas, turintis prieigą prie naujausios informacijos iš Lietuvos teisės kodeksų bei interneto šaltinių. 
-        
-        Tau pateikiamos teisės kodeksų ištraukos yra naujausios redakcijos ir neginčijamos susijusios su klausimu.
-        Klausimai yra susije su  Lietuvos teise ir dokumentai iš lietuvos teises šaltinių. 
+        template="""Tu esi padejejas m kuris padeda atsakyti į klausimus, remiantis pateiktais dokumentais.
+        Dokumentai ir klausimai būna apie projektus statybos, kvietimus teikti pasiūlymus ir panašiai 
         Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}, tau šitų dokumentų turi užtekti, jei vartotojas matys kad atsakymas per mažas ar informacijos per mažai, jis padidint informacijos kiekį.
         Turi suformuluoti atsakymą pagal pateiktus dokumentus ir tau jų turi užtekti. 
         
         Atsakyk tik remdamasis pateiktais dokumentais. Jei atsakymo negalima rasti dokumentuose, pasakyk, iš kur žinai atsakymą. 
         Jei negali atsakyti į klausimą, pasakyk: „Atsiprašau, nežinau atsakymo į jūsų klausimą.“ 
         Nepateik papildomų klausimų ir nesikartok atsakyme.
+        Jei klausimas abstraktus, kaip projektai Vilniuje, tada duok sarasa projektu vilniuje, su labai trumpu aprasymu, jei yra konkretesne užklausa kaip pavyzdiui Vilniuje  paprastojo remonto techninio – darbo projektas, duok sarasa atitinkanti sia uzklausa, jei tik vienas atitikmuo, gali grazinti visa dokumenta.
+        Jei klausiama pavyzdžiui, Vilniuje  paprastojo remonto techninio – darbo projekto konkurso salygos, tada iš atitinkamo dokumento duok konkurso sąlygas, nepamirstant pamineti trumpai kokio projekto tai konkurso sąlygos.
         
         Atsakymas:
         """,
@@ -1464,7 +1011,7 @@ def generate(state,QA_chain):
     Generate answer
     """
     question = state["question"]
-    documents = state["documents"]
+    documents = state["full_documents"] 
     generation = QA_chain.invoke({"documents": documents, "question": question})
     steps = state["steps"]
     steps.append("generate_answer")
@@ -1550,7 +1097,11 @@ def grade_documents(state, retrieval_grader):
 def grade_summary_documents(state, retrieval_grader):
     """
     Grade summary documents and return UUIDs of relevant documents for later retrieval
+    Using ThreadPoolExecutor for concurrent document processing
+    First filter by date, then grade with LLM
     """
+    import datetime
+    
     question = state["question"]
     documents = state["documents"]
     decomposed_documents = state.get('decomposed_documents')
@@ -1559,873 +1110,141 @@ def grade_summary_documents(state, retrieval_grader):
     
     filtered_doc_uuids = []  # Store UUIDs instead of full documents
     search = "No"
+    today = datetime.datetime.now().date()
     
-    if decomposed_documents is None:
-        for d in documents:
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": question, "documents": d})
-            logger.info(f"Grader output for document: {score}")
-            
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
-                search = "Yes"
-                
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
-    
-    else:
-        # Handle decomposed documents (dictionary with question-document pairs)
-        for q, d in decomposed_documents.items():
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": q, "documents": d})
-            logger.info(f"Grader output for question '{q}' and document: {score}")
-            
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
-                search = "Yes"
-
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
-
-    return {
-        "document_uuids": filtered_doc_uuids,  # Return UUIDs instead of full documents
-        "question": question,
-        "search": search,
-        "steps": steps,
-    }
-    
-
-
-
-
-def clean_exa_document(doc):
-    """
-    Extracts and retains only the title, url, text, and summary from the exa result document.
-    """
-    return {
-        "Pavadinimas:    ": doc.title,
-        "        Straipnsio internetinis adresas:    ": doc.url,
-        "Tekstas:    ": doc.text,
-        "                                   Apibendrinimas:    ": doc.summary,
-    }
-
-def web_search(state):
-    question = state["question"]
-    documents = state.get("documents", [])
-    steps = state["steps"]
-    steps.append("web_search")
-    k = 8 - len(documents)
-    web_results_list = []
-
-    # Fetch results from exa
-    exa_results_raw = exa.search_and_contents(
-        query=question,
-        #start_published_date="2020-01-01T22:00:01.000Z",
-
-        type="keyword",
-        num_results=2,
-        text={"max_characters": 1000},
-        summary={
-            "query": "Tell in summary a meaning about what is article written. Provide facts, be concise. Do it in Lithuanian language."
-        },
-        include_domains=[ "infolex.lt", "vmi.lt", "lrs.lt", "e-seimas.lrs.lt", "teise.pro",'lt.wikipedia.org', 'teismai.lt' ],
-        
-    )
-    # Extract results
-    exa_results = exa_results_raw.results if hasattr(exa_results_raw, "results") else []
-    cleaned_exa_results = [clean_exa_document(doc) for doc in exa_results]
-    print(cleaned_exa_results)
-    
-  
-    #web_results = GoogleSerperAPIWrapper(k=2, gl="lt", hl="lt", type="search").results(question)
-    #print(web_results)
-    #formatted_documents = format_google_results_search(web_results)
-    #web_results_list.extend(formatted_documents if isinstance(formatted_documents, list) else [formatted_documents])
-
-    combined_documents = documents + cleaned_exa_results 
-    
-
-    return {"documents": combined_documents, "question": question, "steps": steps}
-
-def decide_to_generate(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
-    
-def decide_to_generate2(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
-    
-
-
-# Helper function to add instructions to the query
-def get_detailed_instruct(task_description: str, query: str) -> str:
-    """Format a query with a task description to guide the model."""
-    return f'Instruct: {task_description}\nQuery: {query}'
-
-# Custom Retriever class with instruction-augmented queries
-class InstructRetriever(BaseRetriever):
-    """Retriever that adds instruction to queries before retrieval."""
-    
-    base_retriever: BaseRetriever = Field(...)
-    task_description: str = Field(...)
-
-    def _get_relevant_documents(self, query: str) -> List[Document]:
-        """Add instruction to the query before passing to the base retriever."""
-        formatted_query = get_detailed_instruct(self.task_description, query)
-        return self.base_retriever.invoke(formatted_query)
-
-
-def check_chit_chat(state, llm):
-    """
-    Classifies the query as 'chit_chat' or 'work_related'.
-    Simple version without using structured output which causes Groq API issues.
-    """
-    question = state["question"]
-    steps = state["steps"]
-    steps.append("Chit Chat check")
-    logger.info(f"Checking if query is chit-chat: '{question}'")
-    
-    # Quick dictionary check first for common greetings
-    CHIT_CHAT_PATTERNS = [
-        "labas", "hi", "hello", "sveiki", "laba diena", "kaip sekasi", 
-        "how are you", "sveikas", "heyo", "hey", "hola"
-    ]
-    
-    # Check if the question contains any chit-chat patterns
-    question_lower = question.lower().strip()
-    for pattern in CHIT_CHAT_PATTERNS:
-        if pattern in question_lower or question_lower == pattern:
-            logger.info(f"Query '{question}' matched chit-chat pattern: {pattern}")
-            return "chit_chat"
-    
-    # For more complex classification, use a simpler prompt approach
-    prompt = PromptTemplate(
-        template="""Jūs esate ekspertas klausimo klasifikavime. Jūsų užduotis yra nustatyti, ar vartotojo užklausa yra paprastas pokalbis, ar esminis klausimas.
-
-Pokalbiai apima sveikinimus (pvz., labas, labas, sveiki), paprastus pasilinksminimus (kaip sekasi?, kaip sekasi?) ir kitus su darbu nesusijusius pokalbius.
-
-Esminiai klausimai yra tie, kurie klausia apie darbus, projektus, kvietumus  ar konkrečias darbo situacijas
-
-User query: {question}
-
-Respond with ONLY ONE WORD: either "chit_chat" or "work_related".
-""",
-        input_variables=["question"],
-    )
-    
-    # Use a simple chain with string output
-    chit_chat_checker = prompt | llm | StrOutputParser()
-    
-    try:
-        # Get the classification result
-        result = chit_chat_checker.invoke({"question": question})
-        logger.info(f"LLM classification result for '{question}': {result}")
-        
-        # Clean up and normalize the result
-        result = result.lower().strip()
-        
-        if "chit" in result or "chat" in result or result.startswith("chit"):
-            logger.info("Query classified as: chit_chat")
-            return "chit_chat"
-        else:
-            logger.info("Query classified as: work_related")
-            return "work_related"
-            
-    except Exception as e:
-        logger.error(f"Error during chit-chat classification: {e}", exc_info=True)
-        # Default to work_related on error
-        return "work_related"
-    
-
-
-def answer_chit_chat(state, llm):
-    """
-    Generates a simple response for chit-chat queries.
-    """
-    question = state["question"]
-    steps = state["steps"]
-    steps.append("answer_chit_chat")
-    logger.info(f"Answering chit-chat: '{question}'")
-    
-    # Quick dictionary lookup for common greetings
-    CHIT_CHAT_RESPONSES = {
-        "labas": "Labas! Kuo galėčiau padėti?",
-        "hi": "Hi! How can I assist you?",
-        "hello": "Hello! How can I help you today?",
-        "sveiki": "Sveiki! Kuo galėčiau jums padėti?",
-        "laba diena": "Laba diena! Kuo galėčiau padėti?",
-        "kaip sekasi?": "Man sekasi puikiai! O kaip jums? Kuo galėčiau padėti?",
-        "how are you?": "I'm doing well, thank you! How can I assist you?",
-    }
-    
-    # Try to find direct match in dictionary
-    question_lower = question.lower().strip()
-    response = CHIT_CHAT_RESPONSES.get(question_lower)
-    
-    # If no direct match, use the LLM
-    if not response:
-        logger.info("No direct dictionary response, generating with LLM...")
-        prompt = PromptTemplate(
-            template="""You are a friendly assistant. Respond naturally to this casual greeting or small talk.
-Respond in the same language as the user's message. Keep your response friendly, brief and conversational.
-Add a prompt encouraging the user to ask about work-related legal questions since you're specialized in Lithuanian labor law.
-
-User message: {question}
-
-Your response:""",
-            input_variables=["question"],
-        )
-        
-        chit_chat_chain = prompt | llm | StrOutputParser()
+    # First filter out expired documents
+    def is_not_expired(doc):
+        """Check if document is not expired based on pateikti_iki date"""
+        pateikti_iki = doc.metadata.get('pateikti_iki')
+        if not pateikti_iki:
+            return True  # No expiration date, so consider valid
         
         try:
-            response = chit_chat_chain.invoke({"question": question})
-        except Exception as e:
-            logger.error(f"Error generating chit-chat response: {e}", exc_info=True)
-            response = "Atsiprašau, įvyko klaida. Kuo galėčiau padėti?"
-    
-    logger.info(f"Generated chit-chat response: '{response}'")
-    
-    # Return updated state with the generation
-    return {
-        "question": question,
-        "generation": response,
-        "steps": steps,
-        "documents": [] # Empty documents for chit-chat
-    }
-
-
-def create_hallucination_checker(llm):
-    """
-    Function to create a hallucination checker object using a passed LLM model.
-    
-    Args:
-        llm: The language model to be used for checking hallucinations in the student's answer.
-        
-    Returns:
-        Callable: A pipeline function that checks if the student's answer contains hallucinations.
-    """
-    
-
-    class hallucination_checker(BaseModel):
-        """Binary score for toxicity check on question."""
-        score: str = Field(
-            description="Ar atsakymas yra naudingas?, 'taip' arba 'ne'"
-        )
-    
-    # Create the structured LLM toxicity checker using the passed LLM
-    
-    
-    
-    structured_llm_hallucination_checker = llm.with_structured_output(hallucination_checker)
-
-    # Define the prompt template
-    prompt = PromptTemplate(
-    template="""Jūs esate profesionalus vertintojas. 
-    Jūsų užduotis – patikrinti, ar ATSAKYMAS atsako į pateiktą KLAUSIMĄ. 
-    
-    
-    Rezultatas:
-    - „Taip“: Atsakymas atsako į klausimą 
-    - „Ne“: Atsakymas neatsako į klausimą 
-
-    ATSAKYMAS: {generation}
-    KLAUSIMAS: {question}
-    
-    Grąžinkite rezultatą JSON formatu:
-    ```json
-    {{
-        "balu": "taip" arba "ne"
-    }}
-    ```""",
-    input_variables=["generation", "question"],
-)
-    
-    # Combine the prompt with the structured LLM hallucination checker
-    hallucination_grader = prompt | structured_llm_hallucination_checker
-
-    # Return the hallucination checker object
-    return hallucination_grader
-
-
-def create_question_rewriter(llm):
-    """
-    Function to create a question rewriter object using a passed LLM model.
-    
-    Args:
-        llm: The language model to be used for rewriting questions.
-        
-    Returns:
-        Callable: A pipeline function that rewrites questions for optimized vector store retrieval.
-    """
-    
-    # Define the prompt template for question rewriting
-    re_write_prompt = PromptTemplate(
-        template="""Esate klausimų perrašytojas, kurio specializacija yra Lietuvos teisė, tobulinanti klausimus, kad būtų galima optimizuoti jų paiešką iš teisinių dokumentų. Jūsų tikslas – išaiškinti teisinę intenciją, pašalinti dviprasmiškumą ir pakoreguoti formuluotes taip, kad jos atspindėtų teisinę kalbą, daugiausia dėmesio skiriant atitinkamiems raktiniams žodžiams. Daryk tai apstrakciai, kadangi taip efektyviausai gaunama informacija iš vectorstore.
-
-Klausimas turi būti kiek įmanoma abstraktesnis. Kuo abstrakčiau tuo geresnis informacijos išgavimas.
-Man nereikia paaiškinimų, tik perrašyto klausimo.
-pvz:
-Klausimas : Asmens dokumento paemimas svetimo asmens?
-Atsakymas: Svetimo asmens dokumento pasisavinimas
-
-Štai pradinis klausimas: \n\n {question}. Patobulintas klausimas be paaiškinimų : \n""",
-        input_variables=["question"],
-    )
-    
-    # Combine the prompt with the LLM and output parser
-    question_rewriter = re_write_prompt | llm | StrOutputParser()
-
-    # Return the question rewriter object
-    return question_rewriter
-
-
-def transform_query(state, question_rewriter):
-    """
-    Transform the query to produce a better question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        state (dict): Updates question key with a re-phrased question
-    """
-
-    print("---TRANSFORM QUERY---")
-    question = state["question"]
-    documents = state["documents"]
-    steps = state["steps"]
-    steps.append("question_transformation")
-    generation_count = state["generation_count"]
-    
-    generation_count = 0
-
-    # Re-write question
-    better_question = question_rewriter.invoke({"question": question})
-    print(f" Transformed question:  {better_question}")
-    return {"documents": documents, "question": better_question,"generation_count": generation_count}
-
-
-
-def format_google_results_search(google_results):
-    formatted_documents = []
-
-    # Extract data from answerBox
-    answer_box = google_results.get("answerBox", {})
-    answer_box_title = answer_box.get("title", "No title")
-    answer_box_answer = answer_box.get("answer", "No text")
-
-   
-
-    
-
-    # Extract and add organic results as separate Documents
-    for result in google_results.get("organic", []):
-        title = result.get("title", "No title")
-        link = result.get("link", "Nėra svetainės adreso")
-        snippet = result.get("snippet", "No snippet available")
-        
-
-        document = Document(
-            metadata={
-                "Organinio rezultato pavadinimas": title,
+            # Extract just the date part if there's a time component
+            if isinstance(pateikti_iki, str):
+                date_part = pateikti_iki.split(' ')[0].split('T')[0]
                 
-            },
-            page_content=(
-                f"Pavadinimas: {title}     "
-                f"Straipsnio ištrauka: {snippet}     "
-                f"Nuoroda: {link}      "
-                
-            )
-        )
-        formatted_documents.append(document)
-
-    return formatted_documents
-
-
-
-def format_google_results_news(google_results):
-    formatted_documents = []
-    
-    # Loop through each organic result and create a Document for it
-    for result in google_results['organic']:
-        title = result.get('title', 'No title')
-        link = result.get('link', 'No link')
-        descripsion = result.get('description', 'No link')
-        snippet = result.get('snippet', 'No summary available')
-        text = result.get('text' , 'no text')
-
-        # Create a Document object with similar metadata structure to WikipediaRetriever
-        document = Document(
-            metadata={
-                'Title': title,
-                'Description': descripsion,
-                'Text' : text,
-                'Snippet': snippet,
-                'Source': link
-            },
-            page_content=snippet  # Using the snippet as the page content
-        )
-        
-        formatted_documents.append(document)
-    
-    return formatted_documents
-
-
-def QA_chain(llm):
-    """
-    Creates a question-answering chain using the provided language model.
-    Args:
-        llm: The language model to use for generating answers.
-    Returns:
-        An LLMChain configured with the question-answering prompt and the provided model.
-    """
-    # Define the prompt template
-    prompt = PromptTemplate(
-        template="""Esi teisės asistentas, turintis prieigą prie naujausios informacijos iš Lietuvos teisės kodeksų bei interneto šaltinių. 
-        
-        Tau pateikiamos teisės kodeksų ištraukos yra naujausios redakcijos ir neginčijamos susijusios su klausimu.
-        Klausimai yra susije su  Lietuvos teise ir dokumentai iš lietuvos teises šaltinių. 
-        Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}, tau šitų dokumentų turi užtekti, jei vartotojas matys kad atsakymas per mažas ar informacijos per mažai, jis padidint informacijos kiekį.
-        Turi suformuluoti atsakymą pagal pateiktus dokumentus ir tau jų turi užtekti. 
-        
-        Atsakyk tik remdamasis pateiktais dokumentais. Jei atsakymo negalima rasti dokumentuose, pasakyk, iš kur žinai atsakymą. 
-        Jei negali atsakyti į klausimą, pasakyk: „Atsiprašau, nežinau atsakymo į jūsų klausimą.“ 
-        Nepateik papildomų klausimų ir nesikartok atsakyme.
-        
-        Atsakymas:
-        """,
-        input_variables=["question", "documents"],
-    )
-
-    rag_chain = prompt | llm | StrOutputParser()
-    
-    return rag_chain
-
-
-def grade_generation_v_documents_and_question(state, hallucination_grader):
-    """
-    Determines whether the generation is grounded in the document and answers the question.
-    """
-    print("---CHECK HALLUCINATIONS---")
-    question = state.get("question")
-    documents = state.get("documents")
-    generation = state.get("generation")
-    generation_count = state.get("generation_count", 0)  # Default to 0 if not provided
-
-    print(f"Generation number: {generation_count}")
-
-    # Grading hallucinations
-    score = hallucination_grader.invoke(
-        {"documents": documents, "generation": generation, "question": question}
-    )
-    grade = getattr(score, "score", None)
-
-    # Check hallucination
-    if grade in {"taip", "Taip", "yes", "Yes"}:
-        print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
-        # Check question-answering
-        print("---GRADE GENERATION vs QUESTION---")
-        return "useful"
-    elif generation_count > 1:
-        print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, TRANSFORM QUERY---")
-        return "transform query"
-    else:
-        print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-        return "retry"
-        
-    
-
-def ask_question(state):
-    """
-    Initialize question
-    Args:
-        state (dict): The current graph state
-    Returns:
-        state (dict): Question
-    """
-    steps = state["steps"]
-    question = state["question"]
-    generations_count = state.get("generations_count", 0) 
-    
-    
-    steps.append("question_asked")
-    return {"question": question, "steps": steps,"generation_count": generations_count}
-        
-        
-def retrieve_full_documents(state, full_vectorstore):
-    """
-    Retrieve full documents using UUIDs from the summary grading step
-    """
-    steps = state["steps"]
-    question = state["question"]
-    document_uuids = state.get("document_uuids", [])
-    
-    steps.append("retrieve_full_documents")
-    
-    logger.info(f"State keys in retrieve_full_documents: {state.keys()}")
-    logger.info(f"document_uuids: {document_uuids}")
-    
-    if not document_uuids:
-        logger.warning("No document UUIDs provided for retrieval")
-        return {
-            "documents": [],
-            "steps": steps
-        }
-    
-    logger.info(f"Retrieving {len(document_uuids)} full documents by UUID")
-    
-    # Get documents by UUID from the full vectorstore
-   
-    retrieved_docs = []
-    for uuid in document_uuids:
-        try:
-            # Get documents with this UUID - result is a dict, not an object
-            results = full_vectorstore._collection.get(where={"uuid": uuid})
-            
-            if results and 'documents' in results and len(results['documents']) > 0:
-                # Convert to Document objects
-                for i, doc_content in enumerate(results['documents']):
-                    metadata = results['metadatas'][i] if i < len(results['metadatas']) else {}
-                    doc = Document(
-                        page_content=doc_content,
-                        metadata=metadata
-                    )
-                    retrieved_docs.append(doc)
-                    logger.info(f"Retrieved document with UUID: {uuid}")
+                # Try common date formats
+                for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%Y/%m/%d', '%d-%m-%Y'):
+                    try:
+                        expiration_date = datetime.datetime.strptime(date_part, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    # If all formats failed, log and consider valid
+                    logger.warning(f"Could not parse pateikti_iki date: {pateikti_iki}")
+                    return True
+            elif isinstance(pateikti_iki, (datetime.date, datetime.datetime)):
+                expiration_date = pateikti_iki if isinstance(pateikti_iki, datetime.date) else pateikti_iki.date()
             else:
-                logger.warning(f"No document found with UUID: {uuid}")
+                logger.warning(f"Unknown pateikti_iki format: {type(pateikti_iki)}")
+                return True
+            
+            # Document is valid if expiration date is in the future or today
+            # (today's date should be LESS than or EQUAL to the expiration date)
+            is_valid = today <= expiration_date  # This is the correct comparison
+            if not is_valid:
+                logger.info(f"Document expired: pateikti_iki = {pateikti_iki} is older than today ({today}), skipping")
+            return is_valid
         except Exception as e:
-            logger.error(f"Error retrieving document with UUID {uuid}: {e}")
+            logger.error(f"Error parsing pateikti_iki date: {e}")
+            return True  # On error, include document
     
-    logger.info(f"Retrieved {len(retrieved_docs)} documents by UUID")
-    
-    return {
-        "documents": retrieved_docs,
-        "steps": steps
-    }
-def retrieve(state, vectorstore, k, search_type):
-    """
-    Retrieve documents based on the processed question.
-    """
-    steps = state["steps"]
-    sub_questions = state.get("sub_questions")
-    processed_question = state.get("processed_question")
-    question = state["question"]
-
-    if sub_questions is None:
-        if processed_question is not None:
-            basic_retriever = vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            
-
-# Instruction-based retriever
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(processed_question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-        else:
-            basic_retriever = vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-    else:
-        documents = []
-        import math
-        
-        k = math.ceil(k / 2)
-        retriever = vectorstore.as_retriever(
-            search_type=search_type,
-            search_kwargs={"k": k}
-        )
-        
-        for q in sub_questions:
-            # Ensure each sub-question is a string
-            if not isinstance(q, str):
-                raise TypeError(f"Each sub-question must be a string, got {type(q)} for question: {q}")
-            
-            document = retriever.invoke(q)
-            documents.extend(document)  # Append the documents retrieved for this sub-question
-
-        steps.append("retrieve_documents")
-        return {
-            "documents": documents,
-            "steps": steps
-        }
-
-
-def retrieve_summaries(state, summaries_vectorstore, k, search_type):
-    """
-    Retrieve documents based on the processed question.
-    """
-    steps = state["steps"]
-    sub_questions = state.get("sub_questions")
-    processed_question = state.get("processed_question")
-    question = state["question"]
-
-    if sub_questions is None:
-        if processed_question is not None:
-            basic_retriever = summaries_vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            
-# Instruction-based retriever
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(processed_question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-        else:
-            basic_retriever = summaries_vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-    else:
-        documents = []
-        import math
-        
-        k = math.ceil(k / 2)
-        retriever = summaries_vectorstore.as_retriever(
-            search_type=search_type,
-            search_kwargs={"k": k}
-        )
-        
-        for q in sub_questions:
-            # Ensure each sub-question is a string
-            if not isinstance(q, str):
-                raise TypeError(f"Each sub-question must be a string, got {type(q)} for question: {q}")
-            
-            document = retriever.invoke(q)
-            documents.extend(document)  # Append the documents retrieved for this sub-question
-
-        steps.append("retrieve_documents")
-        return {
-            "documents": documents,
-            "steps": steps
-        }
-
-
-def grade_summary_documents_sync(state, retrieval_grader):
-    """Synchronous wrapper for the async function"""
-    return asyncio.run(grade_summary_documents(state, retrieval_grader)) 
-
-
-
-def generate(state,QA_chain):
-    """
-    Generate answer
-    """
-    question = state["question"]
-    documents = state["documents"]
-    generation = QA_chain.invoke({"documents": documents, "question": question})
-    steps = state["steps"]
-    steps.append("generate_answer")
-    generation_count = state["generation_count"]
-    
-    generation_count += 1
-        
-    return {
-        "documents": documents,
-        "question": question,
-        "generation": generation,
-        "steps": steps,
-        "generation_count": generation_count  # Include generation_count in return
-    }
-
-
-def grade_documents(state, retrieval_grader):
-    question = state["question"]
-    documents = state["documents"]
-    decomposed_documents = state.get('decomposed_documents')
-    steps = state["steps"]
-    steps.append("grade_document_retrieval")
-    
-    filtered_docs = []
-    web_results_list = []
-    search = "No"
-    
+    # Filter documents by date first
     if decomposed_documents is None:
-
-
-        for d in documents:
-             # Call the grading function
-            score = retrieval_grader.invoke({"question": question, "documents": d})
-            print(f"Grader output for document: {score}")  # Detailed debugging output
+        # Filter the regular documents by date
+        valid_docs = [doc for doc in documents if is_not_expired(doc)]
+        logger.info(f"Date filtering: {len(valid_docs)}/{len(documents)} documents remain after checking expiration dates")
         
-        # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1",'taip']:
-                filtered_docs.append(d)
-            elif len(filtered_docs) < 4:  
-                search = "Yes"
-            
-    # Check the decision-making process
-        print(f"Final decision - Perform web search: {search}")
-        print(f"Filtered documents count: {len(filtered_docs)}")
-    
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
         
-
-    else:
-        # Handle decomposed documents (dictionary with question-document pairs)
-        for q, d in decomposed_documents.items():
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": q, "documents": d})
-            print(f"Grader output for question '{q}' and document: {score}")  # Debugging output
-
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                filtered_docs.append(d)
-            elif len(filtered_docs) < 4:  
-                search = "Yes"
-
-
+        # Use ThreadPoolExecutor only for the valid documents
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
+            future_to_doc = {
+                executor.submit(process_single_document, question, doc): doc
+                for doc in valid_docs
+            }
             
-
-
-
-        # Debugging output
-        print(f"Final decision - Perform web search: {search}")
-        print(f"Filtered decomposed documents count: {len(filtered_docs)}")
-
-
-    return {
-            "documents": filtered_docs,
-            "question": question,
-            "search": search,
-            "steps": steps,
-        }    
-    
-    
-
-
-def grade_summary_documents(state, retrieval_grader):
-    """
-    Grade summary documents and return UUIDs of relevant documents for later retrieval
-    """
-    question = state["question"]
-    documents = state["documents"]
-    decomposed_documents = state.get('decomposed_documents')
-    steps = state["steps"]
-    steps.append("grade_summary_documents")
-    
-    filtered_doc_uuids = []  # Store UUIDs instead of full documents
-    search = "No"
-    
-    if decomposed_documents is None:
-        for d in documents:
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": question, "documents": d})
-            logger.info(f"Grader output for document: {score}")
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
             
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
                 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
     
     else:
         # Handle decomposed documents (dictionary with question-document pairs)
-        for q, d in decomposed_documents.items():
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": q, "documents": d})
-            logger.info(f"Grader output for question '{q}' and document: {score}")
+        # Filter decomposed documents by date
+        valid_decomposed = {q: d for q, d in decomposed_documents.items() if is_not_expired(d)}
+        logger.info(f"Date filtering: {len(valid_decomposed)}/{len(decomposed_documents)} decomposed documents remain")
+        
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
+                
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
+            future_to_doc = {
+                executor.submit(process_single_document, q, d): d
+                for q, d in valid_decomposed.items()
+            }
             
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
+            
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
 
     return {
         "document_uuids": filtered_doc_uuids,  # Return UUIDs instead of full documents
@@ -3105,7 +1924,7 @@ def generate(state,QA_chain):
     Generate answer
     """
     question = state["question"]
-    documents = state["documents"]
+    documents = state["full_documents"] 
     generation = QA_chain.invoke({"documents": documents, "question": question})
     steps = state["steps"]
     steps.append("generate_answer")
@@ -3191,7 +2010,11 @@ def grade_documents(state, retrieval_grader):
 def grade_summary_documents(state, retrieval_grader):
     """
     Grade summary documents and return UUIDs of relevant documents for later retrieval
+    Using ThreadPoolExecutor for concurrent document processing
+    First filter by date, then grade with LLM
     """
+    import datetime
+    
     question = state["question"]
     documents = state["documents"]
     decomposed_documents = state.get('decomposed_documents')
@@ -3200,49 +2023,141 @@ def grade_summary_documents(state, retrieval_grader):
     
     filtered_doc_uuids = []  # Store UUIDs instead of full documents
     search = "No"
+    today = datetime.datetime.now().date()
     
-    if decomposed_documents is None:
-        for d in documents:
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": question, "documents": d})
-            logger.info(f"Grader output for document: {score}")
-            
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
+    # First filter out expired documents
+    def is_not_expired(doc):
+        """Check if document is not expired based on pateikti_iki date"""
+        pateikti_iki = doc.metadata.get('pateikti_iki')
+        if not pateikti_iki:
+            return True  # No expiration date, so consider valid
+        
+        try:
+            # Extract just the date part if there's a time component
+            if isinstance(pateikti_iki, str):
+                date_part = pateikti_iki.split(' ')[0].split('T')[0]
+                
+                # Try common date formats
+                for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%Y/%m/%d', '%d-%m-%Y'):
+                    try:
+                        expiration_date = datetime.datetime.strptime(date_part, fmt).date()
+                        break
+                    except ValueError:
+                        continue
                 else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+                    # If all formats failed, log and consider valid
+                    logger.warning(f"Could not parse pateikti_iki date: {pateikti_iki}")
+                    return True
+            elif isinstance(pateikti_iki, (datetime.date, datetime.datetime)):
+                expiration_date = pateikti_iki if isinstance(pateikti_iki, datetime.date) else pateikti_iki.date()
+            else:
+                logger.warning(f"Unknown pateikti_iki format: {type(pateikti_iki)}")
+                return True
+            
+            # Document is valid if expiration date is in the future or today
+            # (today's date should be LESS than or EQUAL to the expiration date)
+            is_valid = today <= expiration_date  # This is the correct comparison
+            if not is_valid:
+                logger.info(f"Document expired: pateikti_iki = {pateikti_iki} is older than today ({today}), skipping")
+            return is_valid
+        except Exception as e:
+            logger.error(f"Error parsing pateikti_iki date: {e}")
+            return True  # On error, include document
+    
+    # Filter documents by date first
+    if decomposed_documents is None:
+        # Filter the regular documents by date
+        valid_docs = [doc for doc in documents if is_not_expired(doc)]
+        logger.info(f"Date filtering: {len(valid_docs)}/{len(documents)} documents remain after checking expiration dates")
+        
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
+        
+        # Use ThreadPoolExecutor only for the valid documents
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
+            future_to_doc = {
+                executor.submit(process_single_document, question, doc): doc
+                for doc in valid_docs
+            }
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
+            
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
                 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
     
     else:
         # Handle decomposed documents (dictionary with question-document pairs)
-        for q, d in decomposed_documents.items():
-            # Call the grading function
-            score = retrieval_grader.invoke({"question": q, "documents": d})
-            logger.info(f"Grader output for question '{q}' and document: {score}")
+        # Filter decomposed documents by date
+        valid_decomposed = {q: d for q, d in decomposed_documents.items() if is_not_expired(d)}
+        logger.info(f"Date filtering: {len(valid_decomposed)}/{len(decomposed_documents)} decomposed documents remain")
+        
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
+                
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
+            future_to_doc = {
+                executor.submit(process_single_document, q, d): d
+                for q, d in valid_decomposed.items()
+            }
             
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = d.metadata.get('uuid')
-                if doc_uuid:
-                    filtered_doc_uuids.append(doc_uuid)
-                else:
-                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
-            elif len(filtered_doc_uuids) < 4:  
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_doc):
+                result = future.result()
+                if result:
+                    filtered_doc_uuids.append(result)
+            
+            if len(filtered_doc_uuids) < 4:
                 search = "Yes"
 
-        logger.info(f"Final decision - Perform web search: {search}")
-        logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
+            logger.info(f"Final decision - Perform web search: {search}")
+            logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
 
     return {
         "document_uuids": filtered_doc_uuids,  # Return UUIDs instead of full documents
@@ -3678,36 +2593,337 @@ def QA_chain(llm):
     return rag_chain
 
 
-def grade_generation_v_documents_and_question(state, hallucination_grader):
+
+
+
+def generate(state,QA_chain):
     """
-    Determines whether the generation is grounded in the document and answers the question.
+    Generate answer
     """
-    print("---CHECK HALLUCINATIONS---")
-    question = state.get("question")
-    documents = state.get("documents")
-    generation = state.get("generation")
-    generation_count = state.get("generation_count", 0)  # Default to 0 if not provided
+    question = state["question"]
+    documents = state["documents"]
+    generation = QA_chain.invoke({"documents": documents, "question": question})
+    steps = state["steps"]
+    steps.append("generate_answer")
+    generation_count = state["generation_count"]
+    
+    generation_count += 1
+        
+    return {
+        "documents": documents,
+        "question": question,
+        "generation": generation,
+        "steps": steps,
+        "generation_count": generation_count  # Include generation_count in return
+    }
 
-    print(f"Generation number: {generation_count}")
 
-    # Grading hallucinations
-    score = hallucination_grader.invoke(
-        {"documents": documents, "generation": generation, "question": question}
-    )
-    grade = getattr(score, "score", None)
+def grade_documents(state, retrieval_grader):
+    question = state["question"]
+    documents = state["documents"]
+    decomposed_documents = state.get('decomposed_documents')
+    steps = state["steps"]
+    steps.append("grade_document_retrieval")
+    
+    filtered_docs = []
+    web_results_list = []
+    search = "No"
+    
+    if decomposed_documents is None:
 
-    # Check hallucination
-    if grade in {"taip", "Taip", "yes", "Yes"}:
-        print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
-        # Check question-answering
-        print("---GRADE GENERATION vs QUESTION---")
-        return "useful"
-    elif generation_count > 1:
-        print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, TRANSFORM QUERY---")
-        return "transform query"
+
+        for d in documents:
+             # Call the grading function
+            score = retrieval_grader.invoke({"question": question, "documents": d})
+            print(f"Grader output for document: {score}")  # Detailed debugging output
+        
+        # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1",'taip']:
+                filtered_docs.append(d)
+            elif len(filtered_docs) < 4:  
+                search = "Yes"
+            
+    # Check the decision-making process
+        print(f"Final decision - Perform web search: {search}")
+        print(f"Filtered documents count: {len(filtered_docs)}")
+    
+        
+
     else:
-        print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-        return "retry"
+        # Handle decomposed documents (dictionary with question-document pairs)
+        for q, d in decomposed_documents.items():
+            # Call the grading function
+            score = retrieval_grader.invoke({"question": q, "documents": d})
+            print(f"Grader output for question '{q}' and document: {score}")  # Debugging output
+
+            # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                filtered_docs.append(d)
+            elif len(filtered_docs) < 4:  
+                search = "Yes"
+
+
+            
+
+
+
+        # Debugging output
+        print(f"Final decision - Perform web search: {search}")
+        print(f"Filtered decomposed documents count: {len(filtered_docs)}")
+
+
+    return {
+            "documents": filtered_docs,
+            "question": question,
+            "search": search,
+            "steps": steps,
+        }    
+    
+    
+
+
+def grade_summary_documents(state, retrieval_grader):
+    """
+    Grade summary documents and return UUIDs of relevant documents for later retrieval
+    """
+    question = state["question"]
+    documents = state["documents"]
+    decomposed_documents = state.get('decomposed_documents')
+    steps = state["steps"]
+    steps.append("grade_summary_documents")
+    
+    filtered_doc_uuids = []  # Store UUIDs instead of full documents
+    search = "No"
+    
+    if decomposed_documents is None:
+        for d in documents:
+            # Call the grading function
+            score = retrieval_grader.invoke({"question": question, "documents": d})
+            logger.info(f"Grader output for document: {score}")
+            
+            # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                # Extract UUID from document metadata
+                doc_uuid = d.metadata.get('uuid')
+                if doc_uuid:
+                    filtered_doc_uuids.append(doc_uuid)
+                else:
+                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
+            elif len(filtered_doc_uuids) < 4:  
+                search = "Yes"
+                
+        logger.info(f"Final decision - Perform web search: {search}")
+        logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
+    
+    else:
+        # Handle decomposed documents (dictionary with question-document pairs)
+        for q, d in decomposed_documents.items():
+            # Call the grading function
+            score = retrieval_grader.invoke({"question": q, "documents": d})
+            logger.info(f"Grader output for question '{q}' and document: {score}")
+            
+            # Extract the grade
+            grade = getattr(score, 'binary_score', None)
+            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                # Extract UUID from document metadata
+                doc_uuid = d.metadata.get('uuid')
+                if doc_uuid:
+                    filtered_doc_uuids.append(doc_uuid)
+                else:
+                    logger.warning(f"Document has no UUID in metadata: {d.metadata}")
+            elif len(filtered_doc_uuids) < 4:  
+                search = "Yes"
+
+        logger.info(f"Final decision - Perform web search: {search}")
+        logger.info(f"Filtered decomposed document UUIDs count: {len(filtered_doc_uuids)}")
+
+    return {
+        "document_uuids": filtered_doc_uuids,  # Return UUIDs instead of full documents
+        "question": question,
+        "search": search,
+        "steps": steps,
+    }
+    
+
+
+
+
+
+
+
+# Helper function to add instructions to the query
+def get_detailed_instruct(task_description: str, query: str) -> str:
+    """Format a query with a task description to guide the model."""
+    return f'Instruct: {task_description}\nQuery: {query}'
+
+# Custom Retriever class with instruction-augmented queries
+class InstructRetriever(BaseRetriever):
+    """Retriever that adds instruction to queries before retrieval."""
+    
+    base_retriever: BaseRetriever = Field(...)
+    task_description: str = Field(...)
+
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        """Add instruction to the query before passing to the base retriever."""
+        formatted_query = get_detailed_instruct(self.task_description, query)
+        return self.base_retriever.invoke(formatted_query)
+
+
+def check_chit_chat(state, llm):
+    """
+    Classifies the query as 'chit_chat' or 'work_related'.
+    Simple version without using structured output which causes Groq API issues.
+    """
+    question = state["question"]
+    steps = state["steps"]
+    steps.append("Chit Chat check")
+    logger.info(f"Checking if query is chit-chat: '{question}'")
+    
+    # Quick dictionary check first for common greetings
+    CHIT_CHAT_PATTERNS = [
+        "labas", "hi", "hello", "sveiki", "laba diena", "kaip sekasi", 
+        "how are you", "sveikas", "heyo", "hey", "hola"
+    ]
+    
+    # Check if the question contains any chit-chat patterns
+    question_lower = question.lower().strip()
+    for pattern in CHIT_CHAT_PATTERNS:
+        if pattern in question_lower or question_lower == pattern:
+            logger.info(f"Query '{question}' matched chit-chat pattern: {pattern}")
+            return "chit_chat"
+    
+    # For more complex classification, use a simpler prompt approach
+    prompt = PromptTemplate(
+        template="""You are an expert classifier. Your task is to determine if a user's query is simple chit-chat or a substantive question.
+
+Chit-chat includes greetings (like hi, hello, labas, sveiki), simple pleasantries (like how are you?, kaip sekasi?), and other non-work-related small talk.
+
+Substantive questions are those asking about work rights, labor law, or specific employment situations.
+
+User query: {question}
+
+Respond with ONLY ONE WORD: either "chit_chat" or "work_related".
+""",
+        input_variables=["question"],
+    )
+    
+    # Use a simple chain with string output
+    chit_chat_checker = prompt | llm | StrOutputParser()
+    
+    try:
+        # Get the classification result
+        result = chit_chat_checker.invoke({"question": question})
+        logger.info(f"LLM classification result for '{question}': {result}")
+        
+        # Clean up and normalize the result
+        result = result.lower().strip()
+        
+        if "chit" in result or "chat" in result or result.startswith("chit"):
+            logger.info("Query classified as: chit_chat")
+            return "chit_chat"
+        else:
+            logger.info("Query classified as: work_related")
+            return "work_related"
+            
+    except Exception as e:
+        logger.error(f"Error during chit-chat classification: {e}", exc_info=True)
+        # Default to work_related on error
+        return "work_related"
+    
+
+
+def answer_chit_chat(state, llm):
+    """
+    Generates a simple response for chit-chat queries.
+    """
+    question = state["question"]
+    steps = state["steps"]
+    steps.append("answer_chit_chat")
+    logger.info(f"Answering chit-chat: '{question}'")
+    
+    # Quick dictionary lookup for common greetings
+    CHIT_CHAT_RESPONSES = {
+        "labas": "Labas! Kuo galėčiau padėti?",
+        "hi": "Hi! How can I assist you?",
+        "hello": "Hello! How can I help you today?",
+        "sveiki": "Sveiki! Kuo galėčiau jums padėti?",
+        "laba diena": "Laba diena! Kuo galėčiau padėti?",
+        "kaip sekasi?": "Man sekasi puikiai! O kaip jums? Kuo galėčiau padėti?",
+        "how are you?": "I'm doing well, thank you! How can I assist you?",
+    }
+    
+    # Try to find direct match in dictionary
+    question_lower = question.lower().strip()
+    response = CHIT_CHAT_RESPONSES.get(question_lower)
+    
+    # If no direct match, use the LLM
+    if not response:
+        logger.info("No direct dictionary response, generating with LLM...")
+        prompt = PromptTemplate(
+            template="""You are a friendly assistant. Respond naturally to this casual greeting or small talk.
+Respond in the same language as the user's message. Keep your response friendly, brief and conversational.
+Add a prompt encouraging the user to ask about work-related legal questions since you're specialized in Lithuanian labor law.
+
+User message: {question}
+
+Your response:""",
+            input_variables=["question"],
+        )
+        
+        chit_chat_chain = prompt | llm | StrOutputParser()
+        
+        try:
+            response = chit_chat_chain.invoke({"question": question})
+        except Exception as e:
+            logger.error(f"Error generating chit-chat response: {e}", exc_info=True)
+            response = "Atsiprašau, įvyko klaida. Kuo galėčiau padėti?"
+    
+    logger.info(f"Generated chit-chat response: '{response}'")
+    
+    # Return updated state with the generation
+    return {
+        "question": question,
+        "generation": response,
+        "steps": steps,
+        "documents": [] # Empty documents for chit-chat
+    }
+
+
+
+
+def QA_chain(llm):
+    """
+    Creates a question-answering chain using the provided language model.
+    Args:
+        llm: The language model to use for generating answers.
+    Returns:
+        An LLMChain configured with the question-answering prompt and the provided model.
+    """
+    # Define the prompt template
+    prompt = PromptTemplate(
+        template="""Esi teisės asistentas, turintis prieigą prie naujausios informacijos iš Lietuvos teisės kodeksų bei interneto šaltinių. 
+        
+        Tau pateikiamos teisės kodeksų ištraukos yra naujausios redakcijos ir neginčijamos susijusios su klausimu.
+        Klausimai yra susije su  Lietuvos teise ir dokumentai iš lietuvos teises šaltinių. 
+        Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}, tau šitų dokumentų turi užtekti, jei vartotojas matys kad atsakymas per mažas ar informacijos per mažai, jis padidint informacijos kiekį.
+        Turi suformuluoti atsakymą pagal pateiktus dokumentus ir tau jų turi užtekti. 
+        
+        Atsakyk tik remdamasis pateiktais dokumentais. Jei atsakymo negalima rasti dokumentuose, pasakyk, iš kur žinai atsakymą. 
+        Jei negali atsakyti į klausimą, pasakyk: „Atsiprašau, nežinau atsakymo į jūsų klausimą.“ 
+        Nepateik papildomų klausimų ir nesikartok atsakyme.
+        
+        Atsakymas:
+        """,
+        input_variables=["question", "documents"],
+    )
+
+    rag_chain = prompt | llm | StrOutputParser()
+    
+    return rag_chain
+
         
     
 
@@ -3778,74 +2994,7 @@ def retrieve_full_documents(state, full_vectorstore):
         "documents": retrieved_docs,
         "steps": steps
     }
-def retrieve(state, vectorstore, k, search_type):
-    """
-    Retrieve documents based on the processed question.
-    """
-    steps = state["steps"]
-    sub_questions = state.get("sub_questions")
-    processed_question = state.get("processed_question")
-    question = state["question"]
 
-    if sub_questions is None:
-        if processed_question is not None:
-            basic_retriever = vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            
-
-# Instruction-based retriever
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(processed_question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-        else:
-            basic_retriever = vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs={"k": k}
-            )
-            instruct_retriever = InstructRetriever(
-                base_retriever=basic_retriever,
-                task_description=task_description
-            )
-            documents = instruct_retriever.invoke(question)
-
-            steps.append("retrieve_documents")
-            return {
-                "documents": documents,
-                "steps": steps
-            }
-    else:
-        documents = []
-        import math
-        
-        k = math.ceil(k / 2)
-        retriever = vectorstore.as_retriever(
-            search_type=search_type,
-            search_kwargs={"k": k}
-        )
-        
-        for q in sub_questions:
-            # Ensure each sub-question is a string
-            if not isinstance(q, str):
-                raise TypeError(f"Each sub-question must be a string, got {type(q)} for question: {q}")
-            
-            document = retriever.invoke(q)
-            documents.extend(document)  # Append the documents retrieved for this sub-question
-
-        steps.append("retrieve_documents")
-        return {
-            "documents": documents,
-            "steps": steps
-        }
 
 
 def retrieve_summaries(state, summaries_vectorstore, k, search_type):
@@ -4071,83 +3220,6 @@ def grade_summary_documents(state, retrieval_grader):
 
 
 
-
-def clean_exa_document(doc):
-    """
-    Extracts and retains only the title, url, text, and summary from the exa result document.
-    """
-    return {
-        "Pavadinimas:    ": doc.title,
-        "        Straipnsio internetinis adresas:    ": doc.url,
-        "Tekstas:    ": doc.text,
-        "                                   Apibendrinimas:    ": doc.summary,
-    }
-
-def web_search(state):
-    question = state["question"]
-    documents = state.get("documents", [])
-    steps = state["steps"]
-    steps.append("web_search")
-    k = 8 - len(documents)
-    web_results_list = []
-
-    # Fetch results from exa
-    exa_results_raw = exa.search_and_contents(
-        query=question,
-        #start_published_date="2020-01-01T22:00:01.000Z",
-
-        type="keyword",
-        num_results=2,
-        text={"max_characters": 1000},
-        summary={
-            "query": "Tell in summary a meaning about what is article written. Provide facts, be concise. Do it in Lithuanian language."
-        },
-        include_domains=[ "infolex.lt", "vmi.lt", "lrs.lt", "e-seimas.lrs.lt", "teise.pro",'lt.wikipedia.org', 'teismai.lt' ],
-        
-    )
-    # Extract results
-    exa_results = exa_results_raw.results if hasattr(exa_results_raw, "results") else []
-    cleaned_exa_results = [clean_exa_document(doc) for doc in exa_results]
-    print(cleaned_exa_results)
-    
-  
-    #web_results = GoogleSerperAPIWrapper(k=2, gl="lt", hl="lt", type="search").results(question)
-    #print(web_results)
-    #formatted_documents = format_google_results_search(web_results)
-    #web_results_list.extend(formatted_documents if isinstance(formatted_documents, list) else [formatted_documents])
-
-    combined_documents = documents + cleaned_exa_results 
-    
-
-    return {"documents": combined_documents, "question": question, "steps": steps}
-
-def decide_to_generate(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
-    
-def decide_to_generate2(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
     
 
 
@@ -4748,7 +3820,7 @@ def generate(state,QA_chain):
     generation_count += 1
         
     return {
-        "documents": documents,
+        "full_documents": documents,
         "question": question,
         "generation": generation,
         "steps": steps,
@@ -4826,7 +3898,10 @@ def grade_summary_documents(state, retrieval_grader):
     """
     Grade summary documents and return UUIDs of relevant documents for later retrieval
     Using ThreadPoolExecutor for concurrent document processing
+    First filter by date, then grade with LLM
     """
+    import datetime
+    
     question = state["question"]
     documents = state["documents"]
     decomposed_documents = state.get('decomposed_documents')
@@ -4835,36 +3910,89 @@ def grade_summary_documents(state, retrieval_grader):
     
     filtered_doc_uuids = []  # Store UUIDs instead of full documents
     search = "No"
+    today = datetime.datetime.now().date()
     
-    def process_single_document(q, doc):
-        """Helper function to grade a single document"""
+    # First filter out expired documents
+    def is_not_expired(doc):
+        """Check if document is not expired based on Pasiulyma_pateikti_iki date"""
+        # Check both possible field names
+        pateikti_iki = doc.metadata.get('Pasiulyma_pateikti_iki') or doc.metadata.get('pateikti_iki')
+        
+        if not pateikti_iki:
+            return True  # No expiration date, so consider valid
+        
         try:
-            # Call the grading function (synchronous version)
-            score = retrieval_grader.invoke({"question": q, "documents": doc})
-            logger.info(f"Grader output for document: {score}")
-            
-            # Extract the grade
-            grade = getattr(score, 'binary_score', None)
-            if grade and grade.lower() in ["yes", "true", "1", 'taip']:
-                # Extract UUID from document metadata
-                doc_uuid = doc.metadata.get('uuid')
-                if doc_uuid:
-                    return doc_uuid
+            # Extract just the date part if there's a time component
+            if isinstance(pateikti_iki, str):
+                # First try to split by comma to separate date and time
+                if "," in pateikti_iki:
+                    date_part = pateikti_iki.split(",")[0].strip()
                 else:
-                    logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
-                    return None
-            return None
+                    date_part = pateikti_iki.split(" ")[0].strip()
+                
+                # Try common date formats
+                for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%Y/%m/%d', '%d-%m-%Y'):
+                    try:
+                        expiration_date = datetime.datetime.strptime(date_part, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    # If all formats failed, log and consider valid
+                    logger.warning(f"Could not parse date: {pateikti_iki}")
+                    return True
+            elif isinstance(pateikti_iki, (datetime.date, datetime.datetime)):
+                expiration_date = pateikti_iki if isinstance(pateikti_iki, datetime.date) else pateikti_iki.date()
+            else:
+                logger.warning(f"Unknown date format: {type(pateikti_iki)}")
+                return True
+            
+            # Document is valid if expiration date is in the future or today
+            is_valid = today <= expiration_date
+            if not is_valid:
+                logger.info(f"Document expired: date = {pateikti_iki} is older than today ({today}), skipping")
+            else:
+                logger.info(f"Document valid: date = {pateikti_iki} is valid for today ({today}), keeping")
+            
+            return is_valid
         except Exception as e:
-            logger.error(f"Error grading document: {e}")
-            return None
+            logger.error(f"Error parsing date: {e}")
+            return True  # On error, include document
     
-    # Use ThreadPoolExecutor for parallel processing
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        if decomposed_documents is None:
-            # Submit all documents for concurrent processing
+    # Filter documents by date first
+    if decomposed_documents is None:
+        # Filter the regular documents by date
+        valid_docs = [doc for doc in documents if is_not_expired(doc)]
+        logger.info(f"Date filtering: {len(valid_docs)}/{len(documents)} documents remain after checking expiration dates")
+        
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
+        
+        # Use ThreadPoolExecutor only for the valid documents
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
             future_to_doc = {
                 executor.submit(process_single_document, question, doc): doc
-                for doc in documents
+                for doc in valid_docs
             }
             
             # Collect results as they complete
@@ -4878,12 +4006,40 @@ def grade_summary_documents(state, retrieval_grader):
                 
             logger.info(f"Final decision - Perform web search: {search}")
             logger.info(f"Filtered document UUIDs count: {len(filtered_doc_uuids)}")
+    
+    else:
+        # Handle decomposed documents (dictionary with question-document pairs)
+        # Filter decomposed documents by date
+        valid_decomposed = {q: d for q, d in decomposed_documents.items() if is_not_expired(d)}
+        logger.info(f"Date filtering: {len(valid_decomposed)}/{len(decomposed_documents)} decomposed documents remain")
         
-        else:
-            # Handle decomposed documents (dictionary with question-document pairs)
+        def process_single_document(q, doc):
+            """Helper function to grade a single document"""
+            try:
+                # Call the grading function (synchronous version)
+                score = retrieval_grader.invoke({"question": q, "documents": doc})
+                logger.info(f"Grader output for document: {score}")
+                
+                # Extract the grade
+                grade = getattr(score, 'binary_score', None)
+                if grade and grade.lower() in ["yes", "true", "1", 'taip']:
+                    # Extract UUID from document metadata
+                    doc_uuid = doc.metadata.get('uuid')
+                    if doc_uuid:
+                        return doc_uuid
+                    else:
+                        logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
+                        return None
+                return None
+            except Exception as e:
+                logger.error(f"Error grading document: {e}")
+                return None
+                
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit only non-expired documents for concurrent processing
             future_to_doc = {
                 executor.submit(process_single_document, q, d): d
-                for q, d in decomposed_documents.items()
+                for q, d in valid_decomposed.items()
             }
             
             # Collect results as they complete
@@ -4908,83 +4064,6 @@ def grade_summary_documents(state, retrieval_grader):
 
 
 
-
-def clean_exa_document(doc):
-    """
-    Extracts and retains only the title, url, text, and summary from the exa result document.
-    """
-    return {
-        "Pavadinimas:    ": doc.title,
-        "        Straipnsio internetinis adresas:    ": doc.url,
-        "Tekstas:    ": doc.text,
-        "                                   Apibendrinimas:    ": doc.summary,
-    }
-
-def web_search(state):
-    question = state["question"]
-    documents = state.get("documents", [])
-    steps = state["steps"]
-    steps.append("web_search")
-    k = 8 - len(documents)
-    web_results_list = []
-
-    # Fetch results from exa
-    exa_results_raw = exa.search_and_contents(
-        query=question,
-        #start_published_date="2020-01-01T22:00:01.000Z",
-
-        type="keyword",
-        num_results=2,
-        text={"max_characters": 1000},
-        summary={
-            "query": "Tell in summary a meaning about what is article written. Provide facts, be concise. Do it in Lithuanian language."
-        },
-        include_domains=[ "infolex.lt", "vmi.lt", "lrs.lt", "e-seimas.lrs.lt", "teise.pro",'lt.wikipedia.org', 'teismai.lt' ],
-        
-    )
-    # Extract results
-    exa_results = exa_results_raw.results if hasattr(exa_results_raw, "results") else []
-    cleaned_exa_results = [clean_exa_document(doc) for doc in exa_results]
-    print(cleaned_exa_results)
-    
-  
-    #web_results = GoogleSerperAPIWrapper(k=2, gl="lt", hl="lt", type="search").results(question)
-    #print(web_results)
-    #formatted_documents = format_google_results_search(web_results)
-    #web_results_list.extend(formatted_documents if isinstance(formatted_documents, list) else [formatted_documents])
-
-    combined_documents = documents + cleaned_exa_results 
-    
-
-    return {"documents": combined_documents, "question": question, "steps": steps}
-
-def decide_to_generate(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
-    
-def decide_to_generate2(state):
-    """
-    Determines whether to generate an answer, or re-generate a question.
-    Args:
-        state (dict): The current graph state
-    Returns:
-        str: Binary decision for next node to call
-    """
-    search = state["search"]
-    if search == "Yes":
-        return "search"
-    else:
-        return "generate"
     
 
 
