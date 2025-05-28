@@ -5,7 +5,7 @@ import { FaBriefcase, FaBalanceScale, FaChartLine, FaCheck, FaStar } from 'react
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#f0f9e8] via-white to-[#e9f3d9]">
       <Head>
         <title>Mano BŪSTAS | Būsto priežiūros asistentas</title>
         <meta name="description" content="Mano BŪSTAS - jūsų pagalbininkas būsto priežiūros ir teisiniuose klausimuose." />
@@ -48,7 +48,7 @@ export default function Home() {
 
       <main>
         {/* Hero Section */}
-        <section className="py-20 bg-white text-[#1a365d]">
+        <section className="py-20 bg-gradient-to-r from-[#f0f9e8] to-white text-[#1a365d]">
           <div className="container mx-auto px-4 flex flex-col md:flex-row items-center">
             <div className="md:w-1/2 mb-10 md:mb-0">
               <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight text-[#1a365d]">
@@ -65,24 +65,22 @@ export default function Home() {
             </div>
             <div className="md:w-1/2 flex justify-center">
               <div className="relative w-full max-w-md">
-                <Image 
-                  src="/building-illustration.png" 
-                  alt="Būsto priežiūra" 
-                  width={500} 
-                  height={400}
-                  className="object-contain"
-                  onError={(e) => {
-                    // Fallback if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+                <div className="bg-gradient-to-br from-[#e9f3d9] to-[#d5eabc] h-96 w-full rounded-lg flex items-center justify-center shadow-lg">
+                  <div className="text-center">
+                    <h2 className="font-bold text-2xl mb-2">
+                      <span className="text-[#8bc53f]">Mano</span>
+                      <span className="text-[#1a365d]">BŪSTAS</span>
+                    </h2>
+                    <span className="text-[#1a365d] text-xl">Pagalbininkas</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         {/* Features section */}
-        <section id="features" className="py-20 bg-gray-50">
+        <section id="features" className="py-20 bg-gradient-to-b from-white to-[#f0f9e8]">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-bold text-[#1a365d] mb-2">Mūsų paslaugos</h2>
@@ -160,7 +158,7 @@ export default function Home() {
         </section>
         
         {/* Testimonials */}
-        <section className="py-20 bg-white">
+        <section className="py-20 bg-gradient-to-b from-[#f0f9e8] to-white">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-bold text-[#1a365d]">Klientų atsiliepimai</h2>
@@ -213,13 +211,13 @@ export default function Home() {
         </section>
         
         {/* CTA Section */}
-        <section className="py-16 bg-[#8bc53f] text-white">
+        <section className="py-16 bg-gradient-to-r from-[#8bc53f] to-[#79af32] text-white">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-3xl font-bold mb-6">Pasiruošę pradėti?</h2>
             <p className="text-xl mb-8 max-w-2xl mx-auto">
               Susisiekite su mumis jau šiandien ir užtikrinkite profesionalią savo būsto priežiūrą.
             </p>
-            <Link href="/chat" className="inline-block bg-white text-[#1a365d] px-8 py-3 rounded-full hover:bg-gray-100 transition font-medium shadow-lg">
+            <Link href="/chat" className="inline-block bg-white text-[#1a365d] px-8 py-3 rounded-full hover:bg-[#f0f9e8] transition font-medium shadow-lg">
               Sužinoti daugiau
             </Link>
           </div>
@@ -230,7 +228,10 @@ export default function Home() {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
-              <h3 className="text-white text-lg font-semibold mb-4">Mano BŪSTAS</h3>
+              <h3 className="text-white text-lg font-semibold mb-4">
+                <span className="text-[#8bc53f]">Mano</span>
+                <span className="text-white">BŪSTAS</span>
+              </h3>
               <p className="mb-4">Jūsų patikimas būsto priežiūros partneris.</p>
             </div>
             <div>

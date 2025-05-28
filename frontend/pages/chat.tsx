@@ -33,9 +33,6 @@ export default function Chat() {
       content: 'Sveiki atvyke, Mano Būstas asistentas. Kaip galiu jums padėti? /n Prisiminkite, aš esu virtualus asistentas, galiu kartais suklysti.',
       timestamp: new Date()
     }
-
-
-    
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -169,15 +166,19 @@ export default function Chat() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Head>
-        <title>Mano Būstas  Asistentas </title>
-        <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su  Lietuvos darbo teisę " />
+        <title>Mano Būstas Asistentas</title>
+        <meta name="description" content="Gaukite eksperto atsakymus į jūsų klausimus susijusius su Mano Būstas paslaugomis" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <header className="bg-white shadow-sm py-3 sticky top-0 z-10">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
-          <h1 className="text-xl font-bold text-brown-700">Mano Būstas Pagalbininkas</h1>
-          <div className="flex items-center mb-4">
+          <h1 className="text-xl font-bold">
+            <span className="text-[#8bc53f]">Mano</span>
+            <span className="text-[#1a365d]">BŪSTAS</span>
+            <span className="text-[#1a365d] ml-2">Pagalbininkas</span>
+          </h1>
+          <div className="flex items-center mb-4 md:mb-0">
             <ModelSelector 
               selectedModel={selectedModel}
               onModelSelect={setSelectedModel}
@@ -197,7 +198,7 @@ export default function Chat() {
                   alert(`Test failed: ${error}`);
                 }
               }}
-              className="ml-2 px-3 py-1 bg-blue-100 rounded text-sm"
+              className="ml-2 px-3 py-1 bg-[#e9f3d9] text-[#1a365d] rounded text-sm hover:bg-[#d5eabc] transition"
             >
               Test Connection
             </button>
@@ -218,14 +219,14 @@ export default function Chat() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Klauskite apie Mano Būstas duomenis , tokius kaip: kvietimai , skelbimai ir kt."
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-brown-500 resize-none min-h-[50px] max-h-[150px] pr-[90px]"
+              placeholder="Klauskite apie Mano Būstas duomenis, tokius kaip: kvietimai, skelbimai ir kt."
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#8bc53f] resize-none min-h-[50px] max-h-[150px] pr-[90px]"
               disabled={isLoading}
               rows={1}
             />
             <button
               type="submit"
-              className="absolute right-2 bottom-2 bg-brown-600 text-white px-4 py-1.5 rounded-lg hover:bg-brown-700 transition disabled:opacity-50 font-medium text-sm"
+              className="absolute right-2 bottom-2 bg-[#8bc53f] text-white px-4 py-1.5 rounded-lg hover:bg-[#79af32] transition disabled:opacity-50 font-medium text-sm"
               disabled={isLoading || !input.trim()}
             >
               {isLoading ? 'Thinking...' : 'Send'}

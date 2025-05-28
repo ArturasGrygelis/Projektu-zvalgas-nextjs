@@ -860,7 +860,7 @@ def retrieval_grader_grader(llm):
     class GradeDocuments(BaseModel):
         """Ar dokumentas  padės atsakyti į klausimą."""
         binary_score: str = Field(
-            description="Documentai yra aktualūs klausimui, 'yes' arba 'no'"
+            description="Documentas yra aktualūs klausimui, 'yes' arba 'no'"
         )
     
     # Create the structured LLM grader using the passed LLM
@@ -871,18 +871,10 @@ def retrieval_grader_grader(llm):
 
     # Define the prompt template
     prompt = PromptTemplate(
-        template="""Jūs esate mokytojas, vertinantis viktoriną. Jums bus suteikta: 
-        1/ KLAUSIMAS
-        2/ Studento pateiktas FAKTAS
-        
-        Jūs vertinate RELEVANCE RECALL:
-        yes reiškia, kad FAKTAS yra susijęs su KLAUSIMU. 
-        no reiškia, kad FAKTAS nesusijęs su KLAUSIMU. 
-        yes yra aukščiausias (geriausias) balas. no yra žemiausias balas, kurį galite duoti. 
-        
-        Žingsnis po žingsnio paaiškinkite savo samprotavimus. Įsitikinkite, kad jūsų samprotavimai ir išvados yra teisingi. 
-        
-        Iš pradžių venkite tiesiog nurodyti teisingą atsakymą.
+        template="""Tu esi dokumentu tikrintojas kuris žiuri ar dokumentas reikšmingas klausimui.
+Pavyzdziui jei klausime miestas yra tai ar dokumente jis sutampa, jei dokumento tipas yra tada ar dokumento tipoas sutampa,
+ jeigu paminėta darbo specifika pamineta ziuri ar ir dokumente tokia pamineta.
+ Kartais šių punktų nėra dokumente, jei kausime tai randi o dokumente ne, praleisk toki dokumentą.
         
         Klausimas: {question} \n
         FAKTAS: \n\n {documents} \n\n
