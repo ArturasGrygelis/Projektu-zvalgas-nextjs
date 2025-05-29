@@ -399,7 +399,7 @@ def retrieve_summaries(state, summaries_vectorstore, k, search_type):
                 raise TypeError(f"Each sub-question must be a string, got {type(q)} for question: {q}")
             
             document = retriever.invoke(q)
-            documents.extend(document)  # Append the documents retrieved for this sub-question
+            documents.extend(document)  
 
         steps.append("retrieve_documents")
         return {
@@ -418,7 +418,7 @@ def generate(state, QA_chain):
     steps.append("generate_answer")
     generation_count = state["generation_count"]
     
-    # Check if documents list is empty
+
     if not documents:
         logger.info("No valid documents found for query, returning default message")
         generation = "Nėra galiojančių projektų, pagal šią užklausą"
@@ -433,7 +433,7 @@ def generate(state, QA_chain):
         "question": question,
         "generation": generation,
         "steps": steps,
-        "generation_count": generation_count  # Include generation_count in return
+        "generation_count": generation_count  
     }
 
 
@@ -455,30 +455,30 @@ def grade_summary_documents(state, retrieval_grader):
     steps = state["steps"]
     steps.append("grade_summary_documents")
     
-    filtered_doc_uuids = []  # Store UUIDs instead of full documents
-    filtered_summaries = []  # Store actual documents that passed grading
+    filtered_doc_uuids = []  
+    filtered_summaries = []  
     search = "No"
     today = datetime.datetime.now().date()
     
     # First filter out expired documents
     def is_not_expired(doc):
         """Check if document is not expired based on Pasiulyma_pateikti_iki date"""
-        # Check both possible field names
+       
         pateikti_iki = doc.metadata.get('Pasiulyma_pateikti_iki') or doc.metadata.get('pateikti_iki')
         
         if not pateikti_iki:
-            return True  # No expiration date, so consider valid
+            return True  
         
         try:
-            # Extract just the date part if there's a time component
+            
             if isinstance(pateikti_iki, str):
-                # First try to split by comma to separate date and time
+                
                 if "," in pateikti_iki:
                     date_part = pateikti_iki.split(",")[0].strip()
                 else:
                     date_part = pateikti_iki.split(" ")[0].strip()
                 
-                # Try common date formats
+                
                 for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%Y/%m/%d', '%d-%m-%Y'):
                     try:
                         expiration_date = datetime.datetime.strptime(date_part, fmt).date()
@@ -486,7 +486,7 @@ def grade_summary_documents(state, retrieval_grader):
                     except ValueError:
                         continue
                 else:
-                    # If all formats failed, log and consider valid
+                    
                     logger.warning(f"Could not parse date: {pateikti_iki}")
                     return True
             elif isinstance(pateikti_iki, (datetime.date, datetime.datetime)):
@@ -495,7 +495,7 @@ def grade_summary_documents(state, retrieval_grader):
                 logger.warning(f"Unknown date format: {type(pateikti_iki)}")
                 return True
             
-            # Document is valid if expiration date is in the future or today
+            
             is_valid = today <= expiration_date
             if not is_valid:
                 logger.info(f"Document expired: date = {pateikti_iki} is older than today ({today}), skipping")
@@ -507,15 +507,15 @@ def grade_summary_documents(state, retrieval_grader):
             logger.error(f"Error parsing date: {e}")
             return True  # On error, include document
     
-    # Utility function to batch documents
+    
     def batch_documents(docs_list, batch_size=3):
         """Split documents list into batches of specified size"""
         for i in range(0, len(docs_list), batch_size):
             yield docs_list[i:i + batch_size]
     
-    # Filter documents by date first
+    
     if decomposed_documents is None:
-        # Filter the regular documents by date
+        
         valid_docs = [doc for doc in documents if is_not_expired(doc)]
         logger.info(f"Date filtering: {len(valid_docs)}/{len(documents)} documents remain after checking expiration dates")
         
@@ -525,17 +525,17 @@ def grade_summary_documents(state, retrieval_grader):
             
             for doc in doc_batch:
                 try:
-                    # Call the grading function for each document in the batch
+                    
                     score = retrieval_grader.invoke({"question": q, "documents": doc})
                     logger.info(f"Grader output for document: {score}")
                     
-                    # Extract the grade
+                    
                     grade = getattr(score, 'binary_score', None)
                     if grade and grade.lower() in ["yes", "true", "1", 'taip']:
                         # Extract UUID from document metadata
                         doc_uuid = doc.metadata.get('uuid')
                         if doc_uuid:
-                            results.append((doc_uuid, doc))  # Append tuple of UUID and document
+                            results.append((doc_uuid, doc))  
                         else:
                             logger.warning(f"Document has no UUID in metadata: {doc.metadata}")
                 except Exception as e:
@@ -545,18 +545,18 @@ def grade_summary_documents(state, retrieval_grader):
         
         # Process documents in batches of 3
         with ThreadPoolExecutor(max_workers=10) as executor:
-            # Create batches of documents and submit each batch
+            
             future_to_batch = {}
             for doc_batch in batch_documents(valid_docs, 3):
                 future = executor.submit(process_document_batch, question, doc_batch)
                 future_to_batch[future] = doc_batch
             
-            # Collect results as they complete
+         
             for future in concurrent.futures.as_completed(future_to_batch):
                 batch_results = future.result()
                 for uuid, doc in batch_results:
                     filtered_doc_uuids.append(uuid)
-                    filtered_summaries.append(doc)  # Store the full document
+                    filtered_summaries.append(doc)  
             
             if len(filtered_doc_uuids) < 4:
                 search = "Yes"
@@ -566,8 +566,7 @@ def grade_summary_documents(state, retrieval_grader):
             logger.info(f"Filtered summaries count: {len(filtered_summaries)}")
     
     else:
-        # Handle decomposed documents (dictionary with question-document pairs)
-        # Filter decomposed documents by date
+        
         valid_decomposed = {q: d for q, d in decomposed_documents.items() if is_not_expired(d)}
         logger.info(f"Date filtering: {len(valid_decomposed)}/{len(decomposed_documents)} decomposed documents remain")
         
@@ -577,7 +576,7 @@ def grade_summary_documents(state, retrieval_grader):
             
             for q, doc in items_batch:
                 try:
-                    # Call the grading function for this question-document pair
+                    
                     score = retrieval_grader.invoke({"question": q, "documents": doc})
                     logger.info(f"Grader output for document: {score}")
                     
@@ -595,7 +594,7 @@ def grade_summary_documents(state, retrieval_grader):
             
             return results
         
-        # Convert dictionary to list of tuples for batch processing
+
         items_list = list(valid_decomposed.items())
         
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -606,7 +605,6 @@ def grade_summary_documents(state, retrieval_grader):
                 future = executor.submit(process_document_batch, batch)
                 future_to_batch[future] = batch
             
-            # Collect results as they complete
             for future in concurrent.futures.as_completed(future_to_batch):
                 batch_results = future.result()
                 for uuid, doc in batch_results:
@@ -625,13 +623,6 @@ def grade_summary_documents(state, retrieval_grader):
         "filtered_summaries": filtered_summaries  # Include the filtered summary documents
     }
     
-
-
-
-    
-
-
-
 
 
 def check_chit_chat(state, llm):
