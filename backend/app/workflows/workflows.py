@@ -659,15 +659,16 @@ def check_chit_chat(state, llm):
     
     # For more complex classification, use a simpler prompt approach
     prompt = PromptTemplate(
-        template="""You are an expert classifier. Your task is to determine if a user's query is simple chit-chat or a substantive question.
+        template="""Tu esi bendravimo expertas, kuris turi patirties ir statybose. Tu turi atskirti kada žmogus klausia apie statybas, apie dominančius objektus, projektus o kada tiesiog nori paplepeti
 
-Chit-chat includes greetings (like hi, hello, labas, sveiki), simple pleasantries (like how are you?, kaip sekasi?), and other non-work-related small talk.
+Chit-chat Buna  tokie (like hi, hello, labas, sveiki), lengvi klausimai kaip (kaip tau sekasi, kaip laikaisi?), ir kita kalba kuri nesusijusi su statybu ar darbų konkursais projektais, objektais.
+Jei vartotojas klausia pvz, kokie objektai yra Klaipėdoje, tai yra darbo susijęs klausimas, o ne chit-chat.
 
-Substantive questions are those asking about work rights, labor law, or specific employment situations.
+
 
 User query: {question}
 
-Respond with ONLY ONE WORD: either "chit_chat" or "work_related".
+Atsakyk vienu žodžiu tik tais :  "chit_chat" arba "work_related".
 """,
         input_variables=["question"],
     )
