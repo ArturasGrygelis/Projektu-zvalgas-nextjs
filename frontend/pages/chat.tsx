@@ -104,8 +104,8 @@ export default function Chat() {
     }
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await axios.post<ChatApiResponse>(`${apiUrl}/api/chat`, {
+      // Use relative URL instead of absolute URL with hostname
+      const response = await axios.post<ChatApiResponse>(`/api/chat`, {
         message: input,
         model_name: selectedModel,
         conversation_id: conversationId
@@ -156,9 +156,9 @@ export default function Chat() {
       console.error('Error fetching response:', error);
 
       // Improved error message display
-      const errorMessage = axios.isAxiosError(error)
-        ? `Error: ${error.response?.data?.detail || error.message}`
-        : `Error: ${error instanceof Error ? error.message : String(error)}`;
+      const errorMessage = error instanceof Error 
+        ? `Error: ${error.message}` 
+        : `Error: ${String(error)}`;
 
       setMessages(prev => [
         ...prev,
@@ -213,8 +213,8 @@ export default function Chat() {
             <button 
               onClick={async () => {
                 try {
-                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-                  const testResponse = await axios.post(`${apiUrl}/api/raw-response`, {
+                  // Use relative URL for test API call as well
+                  const testResponse = await axios.post(`/api/raw-response`, {
                     message: "Test message",
                     model_name: selectedModel
                   });
