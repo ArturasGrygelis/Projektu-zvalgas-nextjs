@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import axios from 'axios';
 import styles from '../styles/RecentProjects.module.css';
-import { FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaCalendarAlt, FaMapMarkerAlt, FaInfoCircle } from 'react-icons/fa';
 
+// Define proper types for projects
 interface Project {
   id: string;
   title: string;
   deadline: string;
   location: string;
   summary: string;
+  document_id?: string;
 }
 
 // Define the expected API response types
@@ -31,9 +34,7 @@ export default function RecentProjects() {
   useEffect(() => {
     const fetchCities = async () => {
       try {
-        console.log("Fetching cities...");
         const response = await axios.get<CitiesResponse>('/api/cities');
-        console.log("Cities response:", response.data);
         if (response.data && Array.isArray(response.data.cities)) {
           setCities(response.data.cities);
         } else {
@@ -42,7 +43,6 @@ export default function RecentProjects() {
         }
       } catch (err) {
         console.error('Failed to fetch cities:', err);
-        // Don't set error - we can still show projects without cities filter
         setCities([]);
       }
     };
@@ -55,15 +55,12 @@ export default function RecentProjects() {
     const fetchRecentProjects = async () => {
       try {
         setLoading(true);
-        console.log(`Fetching projects with city filter: "${selectedCity}"`);
         
         const url = selectedCity 
           ? `/api/recent-projects?city=${encodeURIComponent(selectedCity)}` 
           : '/api/recent-projects';
         
-        console.log(`API URL: ${url}`);
         const response = await axios.get<ProjectsResponse>(url);
-        console.log("Projects response:", response.data);
         
         if (response.data && Array.isArray(response.data.projects)) {
           setProjects(response.data.projects);
@@ -71,12 +68,12 @@ export default function RecentProjects() {
           console.error("Invalid projects data format:", response.data);
           setProjects([]);
         }
-        setLoading(false);
       } catch (err) {
         console.error('Failed to fetch recent projects:', err);
         setError('Nepavyko užkrauti projektų');
-        setLoading(false);
         setProjects([]);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -86,10 +83,8 @@ export default function RecentProjects() {
   // Format date for display
   const formatDate = (dateStr: string) => {
     try {
-      // Handle different date formats
       if (!dateStr) return '';
       
-      // Try to parse the date
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) {
         return dateStr; // Return original if parsing fails
@@ -102,9 +97,7 @@ export default function RecentProjects() {
 
   // Handle city selection change
   const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newCity = e.target.value;
-    console.log(`City filter changed to: "${newCity}"`);
-    setSelectedCity(newCity);
+    setSelectedCity(e.target.value);
   };
 
   return (
@@ -160,9 +153,21 @@ export default function RecentProjects() {
                   )}
                 </div>
                 <p className={styles.summary}>{project.summary}</p>
-                <a href={`/chat?query=Projektas: ${encodeURIComponent(project.title)}`} className={styles.moreLink}>
-                  Sužinoti daugiau
-                </a>
+                
+                {/* Just one button for each project */}
+                <div className={styles.actionLinks}>
+                  <Link 
+                    href={project.document_id 
+                      ? `/chat?documentId=${encodeURIComponent(project.document_id)}` 
+                      : `/chat?question=${encodeURIComponent(`Išsami informacija apie: ${project.title}`)}`
+                    }
+                    className={`${styles.actionLink} ${styles.moreLink}`}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    <FaInfoCircle className={styles.icon} />
+                    Sužinoti daugiau
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

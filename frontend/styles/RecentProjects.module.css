@@ -220,3 +220,42 @@
     max-height: 330px;
   }
 }
+
+.actionLinks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.actionLink {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.actionLink .icon {
+  margin-right: 5px;
+  font-size: 0.75rem;
+}
+
+.askLink {
+  background-color: #E6F3EC;
+  color: #2D6A4F;
+}
+
+.askLink:hover {
+  background-color: #B7E0C7;
+}
+
+.moreLink {
+  background-color: #F4A261;
+  color: #1A3A5E;
+}
+
+.moreLink:hover {
+  background-color: #FFB703;
+}
