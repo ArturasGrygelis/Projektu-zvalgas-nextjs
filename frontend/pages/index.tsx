@@ -5,7 +5,8 @@ import { useState, useEffect } from 'react';
 import { 
   FaSearch, FaFilter, FaChartLine, FaCheck, FaStar, FaBriefcase, 
   FaBuilding, FaRoad, FaUsers, FaBell, FaLightbulb, FaFileAlt, 
-  FaChartBar, FaShieldAlt, FaCalendarAlt, FaMapMarkerAlt, FaProjectDiagram
+  FaChartBar, FaShieldAlt, FaCalendarAlt, FaMapMarkerAlt, FaProjectDiagram,
+  FaChartPie, FaRegBuilding
 } from 'react-icons/fa';
 import RecentProjects from '../components/RecentProjects';
 
@@ -22,10 +23,15 @@ export default function Home() {
         <div className="container mx-auto px-4 flex justify-between items-center">
           <div className="flex items-center">
             {/* Logo */}
-            <h1 className="text-xl font-bold">
-              <span className="text-[#FFB703]">PROJEKTŲ</span>
-              <span className="text-white"> ŽVALGAS</span>
-            </h1>
+            <div className="flex items-center">
+              <div className="w-9 h-9 mr-3 bg-white rounded-md flex items-center justify-center text-[#1A3A5E]">
+                <FaRegBuilding size={28} className="text-[#1A3A5E]" />
+              </div>
+              <h1 className="text-xl font-bold">
+                <span className="text-[#FFB703]">PROJEKTŲ</span>
+                <span className="text-white"> ŽVALGAS</span>
+              </h1>
+            </div>
           </div>
           
           <nav>
@@ -278,40 +284,62 @@ export default function Home() {
         </main>
       </div>
       
+      {/* Separator section with proper height using py instead of h */}
+      <div className="py-3 bg-gradient-to-r from-[#1A3A5E] via-[#2D6A4F] to-[#1A3A5E]"></div>
+      
+      {/* Footer with centered content */}
       <footer className="bg-[#1A3A5E] text-white py-6">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="flex flex-col md:flex-row justify-between mb-4">
-            <div className="mb-4 md:mb-0">
-              <h3 className="font-bold text-lg mb-2">
+          {/* Centered content */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-8 h-8 mr-2 bg-white rounded-md flex items-center justify-center text-[#1A3A5E]">
+                <FaRegBuilding size={20} className="text-[#1A3A5E]" />
+              </div>
+              <h3 className="font-bold text-xl">
                 <span className="text-[#FFB703]">PROJEKTŲ</span>
                 <span className="text-white"> ŽVALGAS</span>
               </h3>
-              <p className="text-sm text-gray-300 max-w-xs">
-                Moderniausia konkursų paieškos platforma.
-              </p>
             </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold mb-2 text-[#FFB703]">Paslaugos</h4>
-                <ul className="space-y-1 text-sm">
-                  <li><a href="#" className="text-gray-300 hover:text-white transition">Konkursų paieška</a></li>
-                  <li><a href="#" className="text-gray-300 hover:text-white transition">AI asistentas</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-2 text-[#FFB703]">Kontaktai</h4>
-                <ul className="space-y-1 text-sm">
-                  <li className="text-gray-300">info@projektu-zvalgas.lt</li>
-                  <li className="text-gray-300">+370 600 00000</li>
-                </ul>
-              </div>
+            <p className="text-sm text-gray-300 max-w-md mx-auto">
+              Moderniausia konkursų paieškos platforma. Atraskite aktualius konkursus ir projektus vienoje vietoje.
+            </p>
+          </div>
+          
+          {/* Three column layout for links */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-6">
+            <div className="text-center">
+              <h4 className="font-semibold mb-3 text-[#FFB703]">Paslaugos</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="text-gray-300 hover:text-white transition">Konkursų paieška</a></li>
+                <li><a href="#" className="text-gray-300 hover:text-white transition">AI asistentas</a></li>
+                <li><a href="#" className="text-gray-300 hover:text-white transition">Statistikos analizė</a></li>
+              </ul>
+            </div>
+            <div className="text-center">
+              <h4 className="font-semibold mb-3 text-[#FFB703]">Konkursų kategorijos</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="text-gray-300 hover:text-white transition">Statybos projektai</a></li>
+                <li><a href="#" className="text-gray-300 hover:text-white transition">Lauko darbai</a></li>
+                <li><a href="#" className="text-gray-300 hover:text-white transition">Kiti projektai</a></li>
+              </ul>
+            </div>
+            <div className="text-center">
+              <h4 className="font-semibold mb-3 text-[#FFB703]">Kontaktai</h4>
+              <ul className="space-y-2 text-sm">
+                <li className="text-gray-300">info@projektu-zvalgas.lt</li>
+                <li className="text-gray-300">+370 600 00000</li>
+                <li className="text-gray-300">Vilnius, Lietuva</li>
+              </ul>
             </div>
           </div>
-          <div className="border-t border-gray-700 pt-4 flex flex-col sm:flex-row justify-between items-center">
+          
+          <div className="border-t border-gray-700 pt-4 text-center">
             <p className="text-sm text-gray-400">© {new Date().getFullYear()} Projektų ŽVALGAS. Visos teisės saugomos.</p>
-            <div className="mt-2 sm:mt-0">
+            <div className="mt-2">
               <a href="#" className="text-xs text-gray-400 hover:text-white mx-2">Privatumo politika</a>
               <a href="#" className="text-xs text-gray-400 hover:text-white mx-2">Sąlygos</a>
+              <a href="#" className="text-xs text-gray-400 hover:text-white mx-2">Pagalba</a>
             </div>
           </div>
         </div>

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, FormEvent } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import axios from 'axios';
+import { FaRegBuilding } from 'react-icons/fa';
 import ChatBox from '../components/Chatbox';
 import DocumentSidebar from '../components/DocumentSidebar';
 
@@ -194,11 +196,16 @@ export default function Chat() {
       {/* Fixed height header */}
       <header className="bg-[#1A3A5E] text-white shadow-md py-3 z-10 h-[60px]">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-3">
-          <h1 className="text-xl font-bold">
-            <span className="text-[#FFB703]">PROJEKTŲ </span>
-            <span className="text-white"> ŽVALGAS</span>
-            <span className="text-white ml-2">Pagalbininkas</span>
-          </h1>
+          <Link href="/" className="flex items-center">
+            <div className="w-9 h-9 mr-3 bg-white rounded-md flex items-center justify-center text-[#1A3A5E]">
+              <FaRegBuilding size={28} className="text-[#1A3A5E]" />
+            </div>
+            <h1 className="text-xl font-bold">
+              <span className="text-[#FFB703]">PROJEKTŲ </span>
+              <span className="text-white"> ŽVALGAS</span>
+              <span className="text-white ml-2">Pagalbininkas</span>
+            </h1>
+          </Link>
           <div className="flex items-center mb-4 md:mb-0">
             {/* No model selector, just display the model name */}
             <div className="bg-white rounded px-3 py-1 text-black text-sm">
@@ -286,9 +293,20 @@ export default function Chat() {
 
       {/* Footer - fixed height */}
       <footer className="bg-[#1A3A5E] text-white py-4">
-        <div className="container mx-auto px-4 md:px-6 text-center text-sm">
-          <p>© {new Date().getFullYear()} Projektų Žvalgas Pagalbininkas — Patogus būdas sužinoti informacija greitai</p>
-          <p className="text-xs mt-1 text-gray-300">Suteikia informacija iš statybos konkursu duombazės</p>
+        <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row items-center justify-center">
+          <div className="flex items-center mb-2 md:mb-0">
+            <div className="w-6 h-6 mr-2 bg-white rounded-md flex items-center justify-center text-[#1A3A5E]">
+              <FaRegBuilding size={18} className="text-[#1A3A5E]" />
+            </div>
+            <span className="font-medium">
+              <span className="text-[#FFB703]">PROJEKTŲ</span>
+              <span className="text-white"> ŽVALGAS</span>
+            </span>
+          </div>
+          <div className="text-center md:ml-4 text-sm">
+            <p>© {new Date().getFullYear()} Projektų Žvalgas Pagalbininkas — Patogus būdas sužinoti informacija greitai</p>
+            <p className="text-xs mt-1 text-gray-300">Suteikia informacija iš statybos konkursu duombazės</p>
+          </div>
         </div>
       </footer>
     </div>

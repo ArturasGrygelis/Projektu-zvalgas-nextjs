@@ -19,3 +19,87 @@ a {
 * {
   box-sizing: border-box;
 }
+
+.city-select__control {
+  min-height: 38px !important;
+  border-color: #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.city-select__control:hover {
+  border-color: #9ca3af !important;
+}
+
+.city-select__control--is-focused {
+  border-color: #2d6a4f !important;
+  box-shadow: 0 0 0 1px rgba(45, 106, 79, 0.2) !important;
+}
+
+.city-select__placeholder {
+  color: #9ca3af !important;
+  font-size: 0.875rem !important;
+}
+
+.city-select__input {
+  font-size: 0.875rem !important;
+}
+
+.city-select__menu {
+  z-index: 10 !important;
+}
+
+.city-select__option {
+  font-size: 0.875rem !important;
+}
+
+.city-select__option--is-selected {
+  background-color: #2d6a4f !important;
+  color: white !important;
+}
+
+.city-select__option--is-focused:not(.city-select__option--is-selected) {
+  background-color: #f1f5f9 !important;
+}
+
+.city-select__multi-value {
+  background-color: #e6eff6 !important;
+  border-radius: 0.25rem !important;
+}
+
+.city-select__multi-value__label {
+  color: #1a3a5e !important;
+  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+}
+
+.city-select__multi-value__remove {
+  color: #64748b !important;
+}
+
+.city-select__multi-value__remove:hover {
+  background-color: #cbd5e1 !important;
+  color: #1a3a5e !important;
+}
+
+.city-select__clear-indicator {
+  color: #64748b !important;
+}
+
+.city-select__clear-indicator:hover {
+  color: #ef4444 !important;
+}
+
+.city-select__indicator-separator {
+  background-color: #d1d5db !important;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  .city-select__control {
+    min-height: 35px !important;
+  }
+  
+  .city-select__multi-value {
+    margin: 2px !important;
+  }
+}

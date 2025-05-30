@@ -31,11 +31,19 @@ export default function RecentProjects() {
   useEffect(() => {
     const fetchCities = async () => {
       try {
+        console.log("Fetching cities...");
         const response = await axios.get<CitiesResponse>('/api/cities');
-        setCities(response.data.cities);
+        console.log("Cities response:", response.data);
+        if (response.data && Array.isArray(response.data.cities)) {
+          setCities(response.data.cities);
+        } else {
+          console.error("Invalid cities data format:", response.data);
+          setCities([]);
+        }
       } catch (err) {
         console.error('Failed to fetch cities:', err);
         // Don't set error - we can still show projects without cities filter
+        setCities([]);
       }
     };
 
@@ -47,17 +55,28 @@ export default function RecentProjects() {
     const fetchRecentProjects = async () => {
       try {
         setLoading(true);
+        console.log(`Fetching projects with city filter: "${selectedCity}"`);
+        
         const url = selectedCity 
           ? `/api/recent-projects?city=${encodeURIComponent(selectedCity)}` 
           : '/api/recent-projects';
         
+        console.log(`API URL: ${url}`);
         const response = await axios.get<ProjectsResponse>(url);
-        setProjects(response.data.projects);
+        console.log("Projects response:", response.data);
+        
+        if (response.data && Array.isArray(response.data.projects)) {
+          setProjects(response.data.projects);
+        } else {
+          console.error("Invalid projects data format:", response.data);
+          setProjects([]);
+        }
         setLoading(false);
       } catch (err) {
         console.error('Failed to fetch recent projects:', err);
         setError('Nepavyko užkrauti projektų');
         setLoading(false);
+        setProjects([]);
       }
     };
 
@@ -83,7 +102,9 @@ export default function RecentProjects() {
 
   // Handle city selection change
   const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCity(e.target.value);
+    const newCity = e.target.value;
+    console.log(`City filter changed to: "${newCity}"`);
+    setSelectedCity(newCity);
   };
 
   return (
@@ -124,7 +145,7 @@ export default function RecentProjects() {
         ) : (
           <ul className={styles.projectList}>
             {projects.map((project) => (
-              <li key={project.id} className={styles.projectCard}>
+              <li key={project.id || Math.random().toString()} className={styles.projectCard}>
                 <h3 className={styles.projectTitle}>{project.title}</h3>
                 <div className={styles.projectMeta}>
                   <span className={styles.deadline}>
