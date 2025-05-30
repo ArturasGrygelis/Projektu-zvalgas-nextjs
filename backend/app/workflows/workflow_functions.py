@@ -59,7 +59,7 @@ def QA_chain(llm):
         Nepateik papildomų klausimų ir nesikartok atsakyme.
         Svarbiausia atsakyme paminėk visus objektus , jei prasoma isvardinti objektus, išvardink juos , jei klausia apie konkrečia detalę, pateik ta detalę.
         Atsakymas turi būti glaustas, bet išsamus, kad vartotojas galėtų suprasti atsakymą be papildomų paaiškinimų.
-        
+        Atsakyk į klausimą, kalba, kuria buvo užduotas klausimas.
         Atsakymas:
         """,
         input_variables=["question", "documents"],

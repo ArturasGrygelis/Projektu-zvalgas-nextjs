@@ -1,6 +1,6 @@
 import logging
 from fastapi import FastAPI
-from app.api.routes import chat
+from app.api.routes import chat, projects
 from fastapi.middleware.cors import CORSMiddleware
 from app.vectorstore.store import get_vectorstore, VectorStore
 
@@ -41,7 +41,7 @@ async def initialize_vectorstore():
 
 # Include routers
 app.include_router(chat.router, prefix="/api", tags=["chat"])
-
+app.include_router(projects.router, prefix="/api", tags=["projects"])
 # Health check endpoint
 @app.get("/health")
 async def health_check():
