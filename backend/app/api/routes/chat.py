@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import ChatRequest, ChatResponse
+from app.models.schemas import ChatRequest, ChatResponse, DocumentQueryRequest
 import logging
 from datetime import datetime
+import uuid
 
 # Create the router instance at the module level
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Import the service after defining router to avoid circular imports
-from app.services.chat_service import get_chat_response
+from app.services.chat_service import get_chat_response, get_document_specific_response
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -23,6 +24,23 @@ async def chat(request: ChatRequest):
         logger.error(f"Error in chat endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/document_query", response_model=ChatResponse)
+async def document_query(request: DocumentQueryRequest):
+    """
+    Handle document-specific queries and return responses based only on that document.
+    
+    This endpoint is used when a user wants to ask questions about a specific document.
+    """
+    try:
+        logger.info(f"Processing document query for document ID: {request.document_id}")
+        
+        # Call the service function to get document-specific response
+        response = get_document_specific_response(request)
+        return response
+    except Exception as e:
+        logger.error(f"Error in document query endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/models")
 async def list_models():
     """
@@ -31,7 +49,6 @@ async def list_models():
     logger.info("Models endpoint called")
     
     models = [
-        
         {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "name": "LLaMA-4 Scout (17B)"}
     ]
     

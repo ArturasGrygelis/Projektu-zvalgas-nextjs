@@ -34,3 +34,13 @@ class ChatResponse(BaseModel):
 class StripeWebhookEvent(BaseModel):
     event_type: str
     data: Dict[str, Any]
+
+
+class DocumentQueryRequest(BaseModel):
+    """
+    Request schema for document-specific queries.
+    """
+    message: str
+    document_id: str
+    model_name: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    conversation_id: Optional[str] = None    

@@ -1,5 +1,5 @@
-from app.models.schemas import ChatRequest, ChatResponse, SourceDocument
-from app.workflows.workflows import create_minimal_workflow
+from app.models.schemas import ChatRequest, ChatResponse, SourceDocument, DocumentQueryRequest
+from app.workflows.workflows import create_minimal_workflow, create_direct_document_workflow
 from app.vectorstore.store import get_vectorstore
 from datetime import datetime
 import uuid
@@ -77,4 +77,68 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         
     except Exception as e:
         logger.error(f"Error in get_chat_response: {str(e)}")
+        raise
+
+def get_document_specific_response(request: DocumentQueryRequest) -> ChatResponse:
+    """
+    Process a document-specific query and return a response based on that document.
+    
+    Args:
+        request: The document query request containing message and document ID
+        
+    Returns:
+        A ChatResponse object with the LLM's response
+    """
+    try:
+        logger.info(f"Processing document-specific query: '{request.message[:50]}...' for document {request.document_id}")
+        
+        # Get conversation ID or generate new one
+        conversation_id = request.conversation_id or str(uuid.uuid4())
+        
+        # Get full vectorstore
+        full_vectorstore = get_vectorstore(store_type="full")
+        if full_vectorstore is None:
+            raise ValueError("Full vector store not initialized properly")
+            
+        # Create the document-specific workflow
+        workflow = create_direct_document_workflow(
+            full_vectorstore=full_vectorstore,
+            generator_name=request.model_name,
+            generator_temperature=0.1,
+            document_uuid=request.document_id
+        )
+        
+        # Create initial state
+        initial_state = {
+            "question": request.message,
+        }
+        
+        # Execute the workflow
+        result = workflow.invoke(initial_state)
+        
+        # Extract generation from result
+        response_text = result.get("generation", "Atsiprašau, nepavyko sugeneruoti atsakymo apie šį dokumentą.")
+        
+        # Format sources if available
+        formatted_sources = None
+        if "full_documents" in result and result["full_documents"]:
+            formatted_sources = [
+                SourceDocument(
+                    page_content=doc.page_content,
+                    metadata=doc.metadata or {}
+                ) for doc in result["full_documents"]
+            ]
+        
+        # Create response object
+        response = ChatResponse(
+            message=response_text,
+            conversation_id=conversation_id,
+            created_at=datetime.now(),
+            sources=formatted_sources
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in get_document_specific_response: {str(e)}")
         raise

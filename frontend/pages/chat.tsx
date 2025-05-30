@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, FormEvent } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import axios from 'axios';
-import { FaRegBuilding } from 'react-icons/fa';
+import { FaRegBuilding, FaTimes } from 'react-icons/fa';
 import ChatBox from '../components/Chatbox';
 import DocumentSidebar from '../components/DocumentSidebar';
 
@@ -34,6 +34,8 @@ export default function Chat() {
   const [summaryDocuments, setSummaryDocuments] = useState<SourceDoc[]>([]);
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [focusedDocumentId, setFocusedDocumentId] = useState<string | null>(null);
+  const [focusedDocument, setFocusedDocument] = useState<SourceDoc | null>(null);
   
   const [messages, setMessages] = useState<Message[]>([
     { 
@@ -72,6 +74,54 @@ export default function Chat() {
     inputRef.current?.focus();
   };
 
+  // Handle focusing on a specific document
+  const handleDocumentFocus = (docId: string) => {
+    const doc = summaryDocuments.find(doc => 
+      (doc.metadata.uuid === docId) || 
+      (doc.metadata.id === docId) ||
+      (doc.metadata.Dokumento_pavadinimas === docId) ||
+      (doc.metadata.dokumento_pavadinimas === docId)
+    );
+    
+    if (doc) {
+      setFocusedDocumentId(docId);
+      setFocusedDocument(doc);
+      
+      // Add system message to indicate document focus
+      const docName = doc.metadata.Dokumento_pavadinimas || 
+                      doc.metadata.dokumento_pavadinimas || 
+                      "pasirinktas dokumentas";
+                      
+      setMessages(prev => [
+        ...prev,
+        { 
+          role: 'system', 
+          content: `Aktyvuotas dokumentas: "${docName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
+          timestamp: new Date()
+        }
+      ]);
+      
+      // Clear the input to encourage asking about the document
+      setInput('');
+      inputRef.current?.focus();
+    }
+  };
+
+  // Handle clearing document focus mode
+  const clearDocumentFocus = () => {
+    setFocusedDocumentId(null);
+    setFocusedDocument(null);
+    
+    setMessages(prev => [
+      ...prev,
+      { 
+        role: 'system', 
+        content: 'Dokumentų fokusavimas išjungtas. Atsakymai dabar bus teikiami iš visos duomenų bazės.',
+        timestamp: new Date()
+      }
+    ]);
+  };
+
   // Handle input height adjustment for textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -106,12 +156,22 @@ export default function Chat() {
     }
     
     try {
-      // Use relative URL instead of absolute URL with hostname
-      const response = await axios.post<ChatApiResponse>(`/api/chat`, {
+      // Prepare request data based on whether we're in document focus mode
+      const requestData: any = {
         message: input,
         model_name: selectedModel,
         conversation_id: conversationId
-      }, {
+      };
+      
+      // If we have a focused document, add its ID to the request
+      if (focusedDocumentId) {
+        requestData.document_id = focusedDocumentId;
+      }
+      
+      // Use relative URL instead of absolute URL with hostname
+      // If we're in frontend/api structure, update the endpoint path
+      const endpoint = focusedDocumentId ? '/api/document' : '/api/chat';
+      const response = await axios.post<ChatApiResponse>(endpoint, requestData, {
         timeout: 120000
       });
 
@@ -247,7 +307,8 @@ export default function Chat() {
           <div className="hidden md:block md:w-1/4 lg:w-1/5 border-r border-gray-200 bg-white overflow-hidden">
             <DocumentSidebar 
               documents={summaryDocuments} 
-              onDocumentClick={handleDocumentClick} 
+              onDocumentClick={handleDocumentClick}
+              onDocumentFocus={handleDocumentFocus}
               expandable={true}
             />
           </div>
@@ -261,6 +322,31 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Document focus indicator (if active) */}
+          {focusedDocumentId && focusedDocument && (
+            <div className="px-4 py-2 bg-[#E6F3EC] border-t border-[#B7E0C7]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-[#2D6A4F]">
+                    Aktyvuotas specifinis dokumentas
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {focusedDocument.metadata.Dokumento_pavadinimas || 
+                     focusedDocument.metadata.dokumento_pavadinimas || 
+                     "Pasirinktas dokumentas"}
+                    {focusedDocument.metadata.data_objektas ? ` • ${focusedDocument.metadata.data_objektas}` : ""}
+                  </p>
+                </div>
+                <button 
+                  onClick={clearDocumentFocus}
+                  className="ml-3 p-1 bg-[#2D6A4F] text-white rounded-full hover:bg-[#1B4332] flex items-center justify-center"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Input area - positioned right above footer */}
           <div className="border-t border-gray-200 pt-2 pb-2 px-4 bg-white">
             <form onSubmit={handleSubmit}>
@@ -270,7 +356,9 @@ export default function Chat() {
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Klauskite apie projektus, kvietimus, skelbinius ir kitus duomenis..."
+                  placeholder={focusedDocumentId 
+                    ? "Klauskite apie šį specifinį dokumentą..." 
+                    : "Klauskite apie projektus, kvietimus, skelbinius ir kitus duomenis..."}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#2D6A4F] resize-none min-h-[40px] max-h-[80px] pr-[90px]"
                   disabled={isLoading}
                   rows={1}
@@ -290,6 +378,9 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Separator section */}
+      <div className="py-3 bg-gradient-to-r from-[#1A3A5E] via-[#2D6A4F] to-[#1A3A5E]"></div>
 
       {/* Footer - fixed height */}
       <footer className="bg-[#1A3A5E] text-white py-4">

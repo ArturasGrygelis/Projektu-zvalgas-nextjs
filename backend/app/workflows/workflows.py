@@ -144,8 +144,77 @@ def create_minimal_workflow(full_vectorstore, summaries_vectorstore,  k_sum, sea
 
 
 
+def create_direct_document_workflow(full_vectorstore, generator_name, generator_temperature, document_uuid):
+    
+    class GraphState(TypedDict):
+        """
+        Represents the state of our graph.
+        Attributes:
+            question: question
+            generation: LLM generation
+            documents: list of documents
+            document_uuids: List containing the specific document UUID to focus on
+        """
+        question: Annotated[str, "Single"]
+        questions: Annotated[List[str], "Multiple"]
+        generation: str
+        search: str
+        documents: List[str]
+        steps: List[str]
+        generation_count: int
+        decomposed_documents: dict[str, List[str]] 
+        processed_question: Annotated[str, "Single"]
+        sub_questions: List[str]
+        document_uuids: List[str]
+        full_documents: List[str]
+        filtered_summaries: List[str]
+    
+    # Initialize LLM with the specified parameters
+    llm = ChatGroq(
+        model=generator_name,  
+        temperature=generator_temperature,
+        max_tokens=1000,
+        max_retries=3,
+    )
 
+    # Function to initialize the state with the document UUID
+    def initialize_state(state):
+        # Initialize all required fields to prevent KeyErrors
+        if "document_uuids" not in state or state["document_uuids"] is None:
+            state["document_uuids"] = []
+        if "steps" not in state:
+            state["steps"] = []
+        if "generation_count" not in state:
+            state["generation_count"] = 0
+        if "questions" not in state:
+            state["questions"] = []
+        if "documents" not in state:
+            state["documents"] = []
+        if "filtered_summaries" not in state:
+            state["filtered_summaries"] = []
+        
+        # Add the document UUID passed as parameter
+        state["document_uuids"].append(document_uuid)
+        logger.info(f"Initialized document focus workflow with UUID: {document_uuid}")
+        return state
 
+    workflow = StateGraph(GraphState)
+    
+    # Define the nodes
+    workflow.add_node("initialize", initialize_state)  
+    workflow.add_node("ask_question", lambda state: ask_question(state))  
+    workflow.add_node("retrieve_full_documents", lambda state: retrieve_full_documents(state, full_vectorstore))
+    workflow.add_node("generate", lambda state: generate(state, QA_chain(llm)))
+    
+    # Build graph
+    workflow.set_entry_point("initialize")
+    workflow.add_edge("initialize", "ask_question")
+    workflow.add_edge("ask_question", "retrieve_full_documents")
+    workflow.add_edge("retrieve_full_documents", "generate")
+    workflow.add_edge("generate", END)
+    
+    custom_graph = workflow.compile()
 
+    return custom_graph
 
 

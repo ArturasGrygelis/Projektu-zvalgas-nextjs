@@ -40,8 +40,15 @@ async def initialize_vectorstore():
         logger.error("✗ Vector store initialization failed!")
 
 # Include routers
+# Keep the API prefix for the regular chat router
 app.include_router(chat.router, prefix="/api", tags=["chat"])
+
+# Add a separate include_router for document_query without the prefix
+# This allows both /api/document_query and /document_query to work
+app.include_router(chat.router, tags=["chat"])
+
 app.include_router(projects.router, prefix="/api", tags=["projects"])
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -55,4 +62,15 @@ async def health_check():
         "vectorstore_count": vectorstore._collection.count() if vectorstore else 0
     }
 
-#
+# Add debug endpoint to list all routes at runtime
+@app.get("/debug/routes", tags=["debug"])
+async def list_routes():
+    """List all registered routes for debugging"""
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": route.path,
+            "name": route.name,
+            "methods": list(route.methods) if route.methods else []
+        })
+    return {"routes": routes}
