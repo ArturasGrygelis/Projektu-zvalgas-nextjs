@@ -79,64 +79,103 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
       });
     }
   };
+
+  // Helper function to extract document title from page content as fallback
+  const extractTitleFromContent = (content: string): string | null => {
+    if (!content || content.trim().length === 0) return null;
+    
+    // Look for common patterns in Lithuanian documents
+    const patterns = [
+      /(?:KVIETIMAS|Kvietimas)\s+(?:pateikti\s+)?(?:pasiūlymą?|pasiūlymus?)\s+(.+?)(?:\n|$)/i,
+      /(?:PRANEŠIMAS|Pranešimas)\s+(.+?)(?:\n|$)/i,
+      /(?:KONKURSAS|Konkursas)\s+(.+?)(?:\n|$)/i,
+      /(?:SKELBIAMAS|Skelbiamas)\s+(.+?)(?:\n|$)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match && match[1] && match[1].trim().length > 10) {
+        let extracted = match[1].trim();
+        // Clean up common endings
+        extracted = extracted.replace(/\s*(\.|\,|\;|\:)\s*$/, '');
+        // Limit length
+        if (extracted.length > 100) {
+          extracted = extracted.substring(0, 97) + '...';
+        }
+        return extracted;
+      }
+    }
+    
+    // If no pattern matches, try to get the first meaningful line
+    const lines = content.split('\n').filter(line => line.trim().length > 20);
+    if (lines.length > 0) {
+      let firstLine = lines[0].trim();
+      if (firstLine.length > 100) {
+        firstLine = firstLine.substring(0, 97) + '...';
+      }
+      return firstLine;
+    }
+    
+    return null;
+  };
   
-  // Function to fetch recent projects with extensive debugging
+  // Function to fetch recent projects with consistent naming
   const fetchRecentProjects = async () => {
     try {
       setIsLoading(true);
       const response = await axios.get<ProjectsResponse>('/api/recent-projects');
       
       if (response.data && Array.isArray(response.data.projects)) {
-        // Extract project file name from the title if possible
-        const extractDocumentName = (project: Project): string => {
-          // Better document name extraction
-          if (project.title && project.title.includes("Kvietimas")) {
-            return project.title;
-          }
-          
-          // If it already includes .pdf, it's likely a filename
-          if (project.title && project.title.includes('.pdf')) {
-            return project.title;
-          }
-          
-          // Create a descriptive name based on location
-          if (project.location) {
-            return `Kvietimas pateikti pasiūlymą (${project.location})`;
-          }
-          
-          return project.title || "Nežinomas dokumentas";
-        };
+        console.log('🔍 Raw project data from API:', response.data.projects);
         
         // Convert projects to match EXACTLY the format of query results
         const convertedDocs: SourceDoc[] = response.data.projects.map(project => {
-          // Extract a better document name
-          const documentName = extractDocumentName(project);
+          console.log('🔧 Processing project:', project);
+          
+          // Try to extract a proper document title from the summary/content
+          const extractedTitle = extractTitleFromContent(project.summary || '');
+          
+          // Use extracted title if available, otherwise fall back to API title
+          const documentTitle = extractedTitle || project.title;
+          
+          console.log('📝 Document title decision:', {
+            apiTitle: project.title,
+            extractedTitle,
+            finalTitle: documentTitle
+          });
           
           return {
             page_content: project.summary || "",
             metadata: {
               // UUID for workflow - MUST BE THE VECTORSTORE UUID
               uuid: project.id,
-              id: project.id,  // Add id field as fallback
+              id: project.id,
               
-              // THESE FIELD NAMES MUST MATCH QUERY RESULTS!
-              Dokumento_pavadinimas: documentName,
-              dokumento_pavadinimas: documentName,
-              Projekto_pavadinimas: documentName,
-              projekto_pavadinimas: documentName,
-              pavadinimas: documentName,
-              title: documentName,
-              name: documentName,
+              // Use the determined document title (extracted from content or API title)
+              Dokumento_pavadinimas: documentTitle,
+              dokumento_pavadinimas: documentTitle,
+              
+              // Keep project-specific fields with original API title
+              Projekto_pavadinimas: project.title,
+              projekto_pavadinimas: project.title,
+              
+              // Additional title fields for compatibility
+              file_name: documentTitle,
+              pavadinimas: documentTitle,
+              title: documentTitle,
+              name: documentTitle,
               
               // Location fields in all variations
-              Miestas: project.location?.split(',')[0]?.trim() || '',
-              miestas: project.location?.split(',')[0]?.trim() || '',
+              Miestas: project.location?.split(',').pop()?.trim() || '',
+              miestas: project.location?.split(',').pop()?.trim() || '',
               Vieta: project.location || '',
               vieta: project.location || '',
               
-              // Address fields
-              Gatvė: project.location?.includes(',') ? project.location.split(',')[1]?.trim() : '',
-              gatvė: project.location?.includes(',') ? project.location.split(',')[1]?.trim() : '',
+              // Try to extract street from location if it has commas
+              Gatvė: project.location?.includes(',') ? 
+                project.location.split(',').slice(0, -1).join(',').trim() : '',
+              gatvė: project.location?.includes(',') ? 
+                project.location.split(',').slice(0, -1).join(',').trim() : '',
               
               // Deadline fields in all variations
               Pasiulyma_pateikti_iki: project.deadline,
@@ -151,16 +190,18 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
               data_objektas: project.location,
               Dokumento_tipas: "Kvietimas",
               dokumento_tipas: "Kvietimas",
-              konkurso_id: project.id
+              konkurso_id: project.id,
+              _source: "recent_projects"
             }
           };
         });
         
-        console.log('Loaded recent projects:', convertedDocs.length);
+        console.log('📊 Converted recent projects:', convertedDocs);
+        console.log('📊 Total loaded recent projects:', convertedDocs.length);
         setRecentProjects(convertedDocs);
       }
     } catch (err) {
-      console.error('Failed to fetch recent projects:', err);
+      console.error('❌ Failed to fetch recent projects:', err);
       setRecentProjects([]);
     } finally {
       setIsLoading(false);
@@ -171,34 +212,65 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     setExpandedDocs(prev => ({ ...prev, [docId]: !prev[docId] }));
   };
   
-  // Helper functions - IMPROVED to handle more field variations
+  // Helper functions for document information
   const getDocId = (doc: SourceDoc): string => {
     return doc.metadata?.uuid || doc.metadata?.id || `doc-${Math.random().toString(36).substring(2, 9)}`;
   };
 
-  const getDocName = (doc: SourceDoc): string => {
-    // Try ALL possible field variations that might contain document name
-    const name = doc.metadata?.Dokumento_pavadinimas || 
-                 doc.metadata?.dokumento_pavadinimas || 
-                 doc.metadata?.Projekto_pavadinimas ||
-                 doc.metadata?.projekto_pavadinimas ||
-                 doc.metadata?.pavadinimas ||
-                 doc.metadata?.title ||
-                 doc.metadata?.name;
-                 
-    if (name && typeof name === 'string' && name.trim() !== '') {
-      return name;
+  // Improved name extraction with consistent priority order
+  const getDetailedDocName = (doc: SourceDoc): string => {
+    // Priority 1: Use the document title fields (same as query results)
+    if (doc.metadata?.Dokumento_pavadinimas) {
+      console.log('📄 Using Dokumento_pavadinimas:', doc.metadata.Dokumento_pavadinimas);
+      return doc.metadata.Dokumento_pavadinimas;
     }
     
-    // Try to build a name from location if available
-    if (doc.metadata?.data_objektas || doc.metadata?.Miestas || doc.metadata?.miestas) {
-      const location = doc.metadata?.data_objektas || 
-                       `${doc.metadata?.Miestas || doc.metadata?.miestas || ''}`;
-      if (location) {
-        return `Kvietimas pateikti pasiūlymą (${location})`;
+    if (doc.metadata?.dokumento_pavadinimas) {
+      console.log('📄 Using dokumento_pavadinimas:', doc.metadata.dokumento_pavadinimas);
+      return doc.metadata.dokumento_pavadinimas;
+    }
+    
+    // Priority 2: Try to extract from page content as fallback
+    if (doc.page_content) {
+      const extractedTitle = extractTitleFromContent(doc.page_content);
+      if (extractedTitle) {
+        console.log('📄 Extracted title from content:', extractedTitle);
+        return extractedTitle;
       }
     }
     
+    // Priority 3: Use document file fields
+    if (doc.metadata?.Dokumento_failas) {
+      console.log('📄 Using Dokumento_failas:', doc.metadata.Dokumento_failas);
+      return doc.metadata.Dokumento_failas;
+    }
+    
+    if (doc.metadata?.file_name) {
+      console.log('📄 Using file_name:', doc.metadata.file_name);
+      return doc.metadata.file_name;
+    }
+    
+    // Priority 4: Fall back to project/other name fields
+    const fallbackName = doc.metadata?.Projekto_pavadinimas ||
+                         doc.metadata?.projekto_pavadinimas ||
+                         doc.metadata?.pavadinimas ||
+                         doc.metadata?.title ||
+                         doc.metadata?.name;
+    
+    if (fallbackName) {
+      console.log('📄 Using fallback name:', fallbackName);
+      return fallbackName;
+    }
+    
+    // Priority 5: Construct from location if available
+    if (doc.metadata?.data_objektas) {
+      const constructedName = `Kvietimas pateikti pasiūlymą adresu ${doc.metadata.data_objektas}`;
+      console.log('📄 Constructed from data_objektas:', constructedName);
+      return constructedName;
+    }
+    
+    // Last resort
+    console.log('📄 Using default name');
     return "Nežinomas dokumentas";
   };
 
@@ -253,11 +325,15 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
   // Use propDocuments if available (from query), otherwise use recent projects
   const documentsToShow = propDocuments && propDocuments.length > 0 ? propDocuments : recentProjects;
   
+  console.log('📋 Documents to show:', documentsToShow.length);
+  console.log('📋 PropDocuments length:', propDocuments?.length || 0);
+  console.log('📋 RecentProjects length:', recentProjects.length);
+  
   // Filter documents based on search query
   const filteredDocuments = documentsToShow.filter(doc => {
     if (!searchQuery.trim()) return true;
     
-    const docName = getDocName(doc).toLowerCase();
+    const docName = getDetailedDocName(doc).toLowerCase();
     const city = getCity(doc)?.toLowerCase() || '';
     const subject = getSubject(doc)?.toLowerCase() || '';
     const query = searchQuery.toLowerCase();
@@ -299,8 +375,14 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
             {filteredDocuments.map((doc, index) => {
               const docId = getDocId(doc);
               const isExpanded = expandedDocs[docId];
-              const docName = getDocName(doc);
+              const docName = getDetailedDocName(doc);
               const isHighlighted = highlightedDocId === docId;
+              
+              console.log(`🔍 Rendering document ${index}:`, {
+                docId,
+                docName,
+                metadata: doc.metadata
+              });
               
               // Extract information using the exact metadata field names
               const proposalDeadline = doc.metadata?.Pasiulyma_pateikti_iki || 
@@ -349,8 +431,8 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
                         </div>
                       )}
                       
-                      {/* Document title - FIXED to show proper names */}
-                      <p className={`font-medium text-sm ${isHighlighted ? 'text-[#1B4332]' : 'text-[#1A3A5E]'}`}>
+                      {/* Document title - now consistent between recent and related documents */}
+                      <p className={`font-medium text-sm ${isHighlighted ? 'text-[#1B4332]' : 'text-[#1A3A5E]'} break-words whitespace-normal leading-tight`}>
                         {docName}
                       </p>
                       

@@ -37,6 +37,9 @@ interface RecentProjectsResponse {
     summary?: string;
     location?: string;
     deadline?: string;
+    Dokumento_failas?: string;
+    file_name?: string;
+    Dokumento_pavadinimas?: string;
   }>;
 }
 
@@ -100,154 +103,144 @@ export default function Chat() {
         metadata: { 
           ...doc.metadata, 
           _source: "query_results" 
-        } as Record<string, any> // Type assertion to preserve properties
+        } as Record<string, any>
       }));
-      
-      // Prioritize query results by putting them first, then add recent projects 
       setAllDocuments([
         ...markedSummaryDocs,
         ...recentProjects.filter(recentDoc => 
-          // Filter out any recent projects that match query results to avoid duplicates
           !markedSummaryDocs.some(queryDoc => 
             queryDoc.metadata?.uuid === recentDoc.metadata?.uuid
           )
         )
       ]);
     } else {
-      // If no query results, just show recent projects
       setAllDocuments(recentProjects);
     }
   }, [summaryDocuments, recentProjects]);
 
-  // Function to fetch recent projects
+  // Function to fetch recent projects with unified metadata mapping
   const fetchRecentProjects = async () => {
     try {
-      console.log("Fetching recent projects...");
       const response = await axios.get<RecentProjectsResponse>('/api/recent-projects');
-      
       if (response.data && Array.isArray(response.data.projects)) {
-        console.log(`Received ${response.data.projects.length} recent projects`);
-        
-        // Convert projects to SourceDoc format
-        const convertedDocs = response.data.projects.map(project => ({
-          page_content: project.summary || "",
-          metadata: {
-            uuid: project.id,
-            id: project.id,
-            Dokumento_pavadinimas: project.title,
-            dokumento_pavadinimas: project.title,
-            Projekto_pavadinimas: project.title,
-            projekto_pavadinimas: project.title,
-            pavadinimas: project.title,
-            title: project.title,
-            name: project.title,
-            Miestas: project.location?.split(',')[0]?.trim() || '',
-            miestas: project.location?.split(',')[0]?.trim() || '',
-            Vieta: project.location || '',
-            vieta: project.location || '',
-            Pasiulyma_pateikti_iki: project.deadline,
-            pasiulyma_pateikti_iki: project.deadline,
-            Pateikti_projekta_iki: project.deadline,
-            pateikti_iki: project.deadline,
-            Terminas: project.deadline,
-            terminas: project.deadline,
-            deadline: project.deadline,
-            data_objektas: project.location,
-            Dokumento_tipas: "Kvietimas",
-            dokumento_tipas: "Kvietimas",
-            konkurso_id: project.id,
-            _source: "recent_projects"
-          }
-        }));
-        
-        console.log("Converted recent projects into SourceDoc format");
+        const convertedDocs = response.data.projects.map(project => {
+          // Prioritize Dokumento_pavadinimas which contains the full document name
+          const documentName = 
+            project.Dokumento_pavadinimas ||
+            project.Dokumento_failas ||
+            project.file_name ||
+            project.title ||
+            "";
+
+          return {
+            page_content: project.summary || "",
+            metadata: {
+              uuid: project.id,
+              id: project.id,
+              // Use the full document name for all name fields
+              Dokumento_pavadinimas: documentName,
+              dokumento_pavadinimas: documentName,
+              Dokumento_failas: documentName,
+              file_name: documentName,
+              Projekto_pavadinimas: documentName,
+              projekto_pavadinimas: documentName,
+              pavadinimas: documentName,
+              title: documentName,
+              name: documentName,
+              Miestas: project.location?.split(',').pop()?.trim() || '',
+              miestas: project.location?.split(',').pop()?.trim() || '',
+              Vieta: project.location || '',
+              vieta: project.location || '',
+              Gatvė: project.location?.includes(',') ? project.location.split(',').slice(0, -1).join(',').trim() : '',
+              gatvė: project.location?.includes(',') ? project.location.split(',').slice(0, -1).join(',').trim() : '',
+              Pasiulyma_pateikti_iki: project.deadline,
+              pasiulyma_pateikti_iki: project.deadline,
+              Pateikti_projekta_iki: project.deadline,
+              pateikti_iki: project.deadline,
+              Terminas: project.deadline,
+              terminas: project.deadline,
+              deadline: project.deadline,
+              data_objektas: project.location,
+              Dokumento_tipas: "Kvietimas",
+              dokumento_tipas: "Kvietimas",
+              konkurso_id: project.id,
+              _source: "recent_projects"
+            }
+          };
+        });
         setRecentProjects(convertedDocs);
-        
-        // If no summaryDocuments yet, initialize allDocuments with recent projects
         if (summaryDocuments.length === 0) {
           setAllDocuments(convertedDocs);
         }
       }
     } catch (error) {
-      console.error('Error fetching recent projects:', error);
+      console.error('❌ [CHAT] Error fetching recent projects:', error);
     }
+  };
+
+  // Helper function to get best document name - prioritize Dokumento_pavadinimas
+  const getDetailedDocName = (doc: SourceDoc): string => {
+    // Always prioritize Dokumento_pavadinimas first - this contains the full document name
+    if (doc.metadata?.Dokumento_pavadinimas) return doc.metadata.Dokumento_pavadinimas;
+    if (doc.metadata?.dokumento_pavadinimas) return doc.metadata.dokumento_pavadinimas;
+    if (doc.metadata?.Dokumento_failas) return doc.metadata.Dokumento_failas;
+    if (doc.metadata?.file_name) return doc.metadata.file_name;
+    if (doc.metadata?.Projekto_pavadinimas) return doc.metadata.Projekto_pavadinimas;
+    if (doc.metadata?.projekto_pavadinimas) return doc.metadata.projekto_pavadinimas;
+    if (doc.metadata?.pavadinimas) return doc.metadata.pavadinimas;
+    if (doc.metadata?.title) return doc.metadata.title;
+    if (doc.metadata?.name) return doc.metadata.name;
+    return "Nežinomas dokumentas";
   };
 
   // Handle document click in sidebar
   const handleDocumentClick = (doc: SourceDoc) => {
-    const docName = doc.metadata?.Dokumento_pavadinimas || 
-                   doc.metadata?.dokumento_pavadinimas || 
-                   "šį dokumentą";
+    const docName = getDetailedDocName(doc);
     setInput(`Papasakok apie: ${docName}`);
     inputRef.current?.focus();
   };
 
   // Handle focusing on a specific document
   const handleDocumentFocus = async (docId: string) => {
-    console.log("Document focus requested for:", docId);
-    
-    // Try to find in allDocuments first
     const doc = allDocuments.find(doc => 
       (doc.metadata?.uuid === docId) || 
       (doc.metadata?.id === docId)
     );
-    
     if (doc) {
-      console.log("Document found in allDocuments:", doc.metadata?.Dokumento_pavadinimas || doc.metadata?.dokumento_pavadinimas);
-      
-      // Document exists in our merged list
       setFocusedDocumentId(docId);
       setFocusedDocument(doc);
-      
-      const docName = doc.metadata?.Dokumento_pavadinimas || 
-                     doc.metadata?.dokumento_pavadinimas || 
-                     "pasirinktas dokumentas";
-                     
+      const detailedDocName = getDetailedDocName(doc);
       setMessages(prev => [
         ...prev,
         { 
           role: 'system', 
-          content: `Aktyvuotas dokumentas: "${docName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
+          content: `Aktyvuotas dokumentas: "${detailedDocName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
           timestamp: new Date()
         }
       ]);
-      
       setInput('');
       inputRef.current?.focus();
     } else {
-      // Document not found in our merged list - might be a direct UUID reference
-      console.log("Document not found in allDocuments, creating direct workflow for:", docId);
-      
       try {
-        // Call the backend API to create a direct document workflow
         const response = await axios.post<DirectDocumentResponse>('/api/create-direct-document-workflow', {
           document_id: docId
         });
-        
-        console.log("Response from create-direct-document-workflow:", response.data);
-        
         if (response.data?.document) {
           const fetchedDoc = response.data.document;
           setFocusedDocumentId(docId);
           setFocusedDocument(fetchedDoc);
-          
-          const docName = fetchedDoc.metadata?.Dokumento_pavadinimas || 
-                         fetchedDoc.metadata?.dokumento_pavadinimas || 
-                         "pasirinktas dokumentas";
-          
+          const detailedDocName = getDetailedDocName(fetchedDoc);
           setMessages(prev => [
             ...prev,
             { 
               role: 'system', 
-              content: `Aktyvuotas dokumentas: "${docName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
+              content: `Aktyvuotas dokumentas: "${detailedDocName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
               timestamp: new Date()
             }
           ]);
-          
           setInput('');
           inputRef.current?.focus();
         } else {
-          console.error("No document in response from create-direct-document-workflow");
           setMessages(prev => [
             ...prev,
             { 
@@ -258,8 +251,6 @@ export default function Chat() {
           ]);
         }
       } catch (error) {
-        console.error("Error creating direct document workflow:", error);
-        
         setMessages(prev => [
           ...prev,
           { 
@@ -276,7 +267,6 @@ export default function Chat() {
   const clearDocumentFocus = () => {
     setFocusedDocumentId(null);
     setFocusedDocument(null);
-    
     setMessages(prev => [
       ...prev,
       { 
@@ -290,74 +280,47 @@ export default function Chat() {
   // Handle input height adjustment for textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    
-    // Reset height
     e.target.style.height = 'auto';
-    
-    // Set new height based on content
     const newHeight = Math.min(e.target.scrollHeight, 80);
     e.target.style.height = `${newHeight}px`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!input.trim()) return;
-    
-    // Add user message
     const userMessage: Message = {
       role: 'user',
       content: input,
       timestamp: new Date()
     };
-    
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
-    
-    // Reset textarea height
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-    
     try {
-      // Prepare request data based on whether we're in document focus mode
       const requestData: any = {
         message: input,
         model_name: selectedModel,
         conversation_id: conversationId
       };
-      
-      // If we have a focused document, add its ID to the request
       if (focusedDocumentId) {
         requestData.document_id = focusedDocumentId;
       }
-      
-      // Use relative URL instead of absolute URL with hostname
-      // If we're in frontend/api structure, update the endpoint path
       const endpoint = focusedDocumentId ? '/api/document' : '/api/chat';
       const response = await axios.post<ChatApiResponse>(endpoint, requestData, {
         timeout: 120000
       });
-
-      console.log("Response received:", response.data);
-      console.log("Summary documents:", response.data.summary_documents?.length || 0);
-
-      // --- Safer Timestamp Parsing & State Update ---
       let responseTimestamp = new Date();
       try {
         if (response.data.created_at) {
           responseTimestamp = new Date(response.data.created_at);
           if (isNaN(responseTimestamp.getTime())) {
-             console.warn("Invalid date format received:", response.data.created_at);
              responseTimestamp = new Date();
           }
         }
-      } catch (dateError) {
-         console.error("Error parsing date:", dateError);
-      }
-
-      // Add the assistant's message to the state, including sources
+      } catch (dateError) {}
       setMessages(prev => [
         ...prev,
         {
@@ -367,26 +330,16 @@ export default function Chat() {
           sources: response.data.sources
         }
       ]);
-
-      // Update summary documents if they exist in the response
       if (response.data.summary_documents && response.data.summary_documents.length > 0) {
-        console.log("Updating sidebar with summary documents:", response.data.summary_documents.length);
         setSummaryDocuments(response.data.summary_documents);
       }
-      
-      // Store conversation ID if it's the first message
       if (!conversationId && response.data.conversation_id) {
         setConversationId(response.data.conversation_id);
       }
-
     } catch (error) {
-      console.error('Error fetching response:', error);
-
-      // Improved error message display
       const errorMessage = error instanceof Error 
         ? `Error: ${error.message}` 
         : `Error: ${String(error)}`;
-
       setMessages(prev => [
         ...prev,
         {
@@ -395,7 +348,6 @@ export default function Chat() {
           timestamp: new Date()
         }
       ]);
-
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -432,7 +384,6 @@ export default function Chat() {
             </h1>
           </Link>
           <div className="flex items-center mb-4 md:mb-0">
-            {/* No model selector, just display the model name */}
             <div className="bg-white rounded px-3 py-1 text-black text-sm">
               <span className="font-medium text-[#1A3A5E]">Llama 4 Scout</span>
             </div>
@@ -445,15 +396,12 @@ export default function Chat() {
             <button 
               onClick={async () => {
                 try {
-                  // Use relative URL for test API call as well
                   const testResponse = await axios.post(`/api/raw-response`, {
                     message: "Test message",
                     model_name: selectedModel
                   });
-                  console.log("Test response:", testResponse.data);
                   alert(`Test successful! Response: ${JSON.stringify(testResponse.data)}`);
                 } catch (error) {
-                  console.error("Test failed:", error);
                   alert(`Test failed: ${error}`);
                 }
               }}
@@ -491,20 +439,17 @@ export default function Chat() {
           {focusedDocumentId && focusedDocument && (
             <div className="px-4 py-2 bg-[#E6F3EC] border-t border-[#B7E0C7]">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-grow pr-3">
                   <p className="text-sm font-medium text-[#2D6A4F]">
                     Aktyvuotas specifinis dokumentas
                   </p>
-                  <p className="text-xs text-gray-600">
-                    {focusedDocument.metadata.Dokumento_pavadinimas || 
-                     focusedDocument.metadata.dokumento_pavadinimas || 
-                     "Pasirinktas dokumentas"}
-                    {focusedDocument.metadata.data_objektas ? ` • ${focusedDocument.metadata.data_objektas}` : ""}
+                  <p className="text-xs text-gray-600 break-words whitespace-normal">
+                    {getDetailedDocName(focusedDocument)}
                   </p>
                 </div>
                 <button 
                   onClick={clearDocumentFocus}
-                  className="ml-3 p-1 bg-[#2D6A4F] text-white rounded-full hover:bg-[#1B4332] flex items-center justify-center"
+                  className="ml-3 p-1 bg-[#2D6A4F] text-white rounded-full hover:bg-[#1B4332] flex-shrink-0 flex items-center justify-center"
                 >
                   <FaTimes size={14} />
                 </button>

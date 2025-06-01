@@ -12,6 +12,7 @@ export default async function handler(
   try {
     const { city } = req.query;
     
+    // Fetch recent projects from the backend
     const response = await axios.get(
       `http://localhost:8000/api/recent-projects${city ? `?city=${encodeURIComponent(String(city))}` : ''}`,
       {
@@ -22,6 +23,7 @@ export default async function handler(
       }
     );
     
+    // Pass the backend response directly to the frontend
     return res.status(200).json(response.data);
   } catch (error) {
     console.error('Error fetching recent projects:', error);
