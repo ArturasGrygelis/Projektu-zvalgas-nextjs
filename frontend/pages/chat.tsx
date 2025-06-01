@@ -21,6 +21,25 @@ interface ChatApiResponse {
   summary_documents?: SourceDoc[];
 }
 
+// Add type for direct document workflow response
+interface DirectDocumentResponse {
+  document: SourceDoc;
+  workflow_id?: string;
+  message?: string;
+  success?: boolean;
+}
+
+// Add type for recent projects API response
+interface RecentProjectsResponse {
+  projects: Array<{
+    id: string;
+    title: string;
+    summary?: string;
+    location?: string;
+    deadline?: string;
+  }>;
+}
+
 // Update Message type
 type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -32,6 +51,8 @@ type Message = {
 export default function Chat() {
   // State variables
   const [summaryDocuments, setSummaryDocuments] = useState<SourceDoc[]>([]);
+  const [recentProjects, setRecentProjects] = useState<SourceDoc[]>([]);
+  const [allDocuments, setAllDocuments] = useState<SourceDoc[]>([]);
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [focusedDocumentId, setFocusedDocumentId] = useState<string | null>(null);
@@ -65,33 +86,123 @@ export default function Chat() {
     inputRef.current?.focus();
   }, []);
 
+  // Fetch recent projects on mount
+  useEffect(() => {
+    fetchRecentProjects();
+  }, []);
+  
+  // Update allDocuments when either summaryDocuments or recentProjects change
+  useEffect(() => {
+    if (summaryDocuments && summaryDocuments.length > 0) {
+      // Mark these as coming from query results
+      const markedSummaryDocs = summaryDocuments.map(doc => ({
+        ...doc,
+        metadata: { 
+          ...doc.metadata, 
+          _source: "query_results" 
+        } as Record<string, any> // Type assertion to preserve properties
+      }));
+      
+      // Prioritize query results by putting them first, then add recent projects 
+      setAllDocuments([
+        ...markedSummaryDocs,
+        ...recentProjects.filter(recentDoc => 
+          // Filter out any recent projects that match query results to avoid duplicates
+          !markedSummaryDocs.some(queryDoc => 
+            queryDoc.metadata?.uuid === recentDoc.metadata?.uuid
+          )
+        )
+      ]);
+    } else {
+      // If no query results, just show recent projects
+      setAllDocuments(recentProjects);
+    }
+  }, [summaryDocuments, recentProjects]);
+
+  // Function to fetch recent projects
+  const fetchRecentProjects = async () => {
+    try {
+      console.log("Fetching recent projects...");
+      const response = await axios.get<RecentProjectsResponse>('/api/recent-projects');
+      
+      if (response.data && Array.isArray(response.data.projects)) {
+        console.log(`Received ${response.data.projects.length} recent projects`);
+        
+        // Convert projects to SourceDoc format
+        const convertedDocs = response.data.projects.map(project => ({
+          page_content: project.summary || "",
+          metadata: {
+            uuid: project.id,
+            id: project.id,
+            Dokumento_pavadinimas: project.title,
+            dokumento_pavadinimas: project.title,
+            Projekto_pavadinimas: project.title,
+            projekto_pavadinimas: project.title,
+            pavadinimas: project.title,
+            title: project.title,
+            name: project.title,
+            Miestas: project.location?.split(',')[0]?.trim() || '',
+            miestas: project.location?.split(',')[0]?.trim() || '',
+            Vieta: project.location || '',
+            vieta: project.location || '',
+            Pasiulyma_pateikti_iki: project.deadline,
+            pasiulyma_pateikti_iki: project.deadline,
+            Pateikti_projekta_iki: project.deadline,
+            pateikti_iki: project.deadline,
+            Terminas: project.deadline,
+            terminas: project.deadline,
+            deadline: project.deadline,
+            data_objektas: project.location,
+            Dokumento_tipas: "Kvietimas",
+            dokumento_tipas: "Kvietimas",
+            konkurso_id: project.id,
+            _source: "recent_projects"
+          }
+        }));
+        
+        console.log("Converted recent projects into SourceDoc format");
+        setRecentProjects(convertedDocs);
+        
+        // If no summaryDocuments yet, initialize allDocuments with recent projects
+        if (summaryDocuments.length === 0) {
+          setAllDocuments(convertedDocs);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching recent projects:', error);
+    }
+  };
+
   // Handle document click in sidebar
   const handleDocumentClick = (doc: SourceDoc) => {
-    const docName = doc.metadata.Dokumento_pavadinimas || 
-                   doc.metadata.dokumento_pavadinimas || 
+    const docName = doc.metadata?.Dokumento_pavadinimas || 
+                   doc.metadata?.dokumento_pavadinimas || 
                    "šį dokumentą";
     setInput(`Papasakok apie: ${docName}`);
     inputRef.current?.focus();
   };
 
   // Handle focusing on a specific document
-  const handleDocumentFocus = (docId: string) => {
-    const doc = summaryDocuments.find(doc => 
-      (doc.metadata.uuid === docId) || 
-      (doc.metadata.id === docId) ||
-      (doc.metadata.Dokumento_pavadinimas === docId) ||
-      (doc.metadata.dokumento_pavadinimas === docId)
+  const handleDocumentFocus = async (docId: string) => {
+    console.log("Document focus requested for:", docId);
+    
+    // Try to find in allDocuments first
+    const doc = allDocuments.find(doc => 
+      (doc.metadata?.uuid === docId) || 
+      (doc.metadata?.id === docId)
     );
     
     if (doc) {
+      console.log("Document found in allDocuments:", doc.metadata?.Dokumento_pavadinimas || doc.metadata?.dokumento_pavadinimas);
+      
+      // Document exists in our merged list
       setFocusedDocumentId(docId);
       setFocusedDocument(doc);
       
-      // Add system message to indicate document focus
-      const docName = doc.metadata.Dokumento_pavadinimas || 
-                      doc.metadata.dokumento_pavadinimas || 
-                      "pasirinktas dokumentas";
-                      
+      const docName = doc.metadata?.Dokumento_pavadinimas || 
+                     doc.metadata?.dokumento_pavadinimas || 
+                     "pasirinktas dokumentas";
+                     
       setMessages(prev => [
         ...prev,
         { 
@@ -101,9 +212,63 @@ export default function Chat() {
         }
       ]);
       
-      // Clear the input to encourage asking about the document
       setInput('');
       inputRef.current?.focus();
+    } else {
+      // Document not found in our merged list - might be a direct UUID reference
+      console.log("Document not found in allDocuments, creating direct workflow for:", docId);
+      
+      try {
+        // Call the backend API to create a direct document workflow
+        const response = await axios.post<DirectDocumentResponse>('/api/create-direct-document-workflow', {
+          document_id: docId
+        });
+        
+        console.log("Response from create-direct-document-workflow:", response.data);
+        
+        if (response.data?.document) {
+          const fetchedDoc = response.data.document;
+          setFocusedDocumentId(docId);
+          setFocusedDocument(fetchedDoc);
+          
+          const docName = fetchedDoc.metadata?.Dokumento_pavadinimas || 
+                         fetchedDoc.metadata?.dokumento_pavadinimas || 
+                         "pasirinktas dokumentas";
+          
+          setMessages(prev => [
+            ...prev,
+            { 
+              role: 'system', 
+              content: `Aktyvuotas dokumentas: "${docName}"\n\nAtsakymai bus teikiami remiantis tik šiuo dokumentu. Klauskite apie šį projektą.`,
+              timestamp: new Date()
+            }
+          ]);
+          
+          setInput('');
+          inputRef.current?.focus();
+        } else {
+          console.error("No document in response from create-direct-document-workflow");
+          setMessages(prev => [
+            ...prev,
+            { 
+              role: 'system', 
+              content: `⚠️ Nepavyko aktyvuoti dokumento. Bandykite dar kartą vėliau.`,
+              timestamp: new Date()
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error("Error creating direct document workflow:", error);
+        
+        setMessages(prev => [
+          ...prev,
+          { 
+            role: 'system', 
+            content: `⚠️ Nepavyko aktyvuoti dokumento. Bandykite dar kartą vėliau.`,
+            timestamp: new Date()
+          }
+        ]);
+      }
     }
   };
 
@@ -306,7 +471,7 @@ export default function Chat() {
         {showSidebar && (
           <div className="hidden md:block md:w-1/4 lg:w-1/5 border-r border-gray-200 bg-white overflow-hidden">
             <DocumentSidebar 
-              documents={summaryDocuments} 
+              documents={allDocuments} 
               onDocumentClick={handleDocumentClick}
               onDocumentFocus={handleDocumentFocus}
               expandable={true}

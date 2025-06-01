@@ -57,13 +57,34 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     }
   }, [initialDocumentId]);
   
+  // UNIFIED CLICK HANDLER - Use this for ALL document types
+  const handleDocumentFocus = (doc: SourceDoc) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const docId = doc.metadata?.uuid;
+    console.log('UNIFIED HANDLER: Document focus with UUID:', docId);
+    
+    // Highlight the document
+    setHighlightedDocId(docId);
+    
+    // Call the workflow with the document UUID
+    if (onDocumentFocus && docId) {
+      onDocumentFocus(docId);
+      console.log('✅ Called onDocumentFocus with UUID:', docId);
+    } else {
+      console.error('❌ Missing UUID or handler', {
+        hasDocId: !!docId,
+        hasHandler: !!onDocumentFocus
+      });
+    }
+  };
+  
   // Function to fetch recent projects with extensive debugging
   const fetchRecentProjects = async () => {
     try {
       setIsLoading(true);
       const response = await axios.get<ProjectsResponse>('/api/recent-projects');
-      
-      console.log('DEBUG - Raw response from /api/recent-projects:', response.data);
       
       if (response.data && Array.isArray(response.data.projects)) {
         // Extract project file name from the title if possible
@@ -96,6 +117,7 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
             metadata: {
               // UUID for workflow - MUST BE THE VECTORSTORE UUID
               uuid: project.id,
+              id: project.id,  // Add id field as fallback
               
               // THESE FIELD NAMES MUST MATCH QUERY RESULTS!
               Dokumento_pavadinimas: documentName,
@@ -134,10 +156,7 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
           };
         });
         
-        console.log('DEBUG - Converted docs with proper titles:', 
-          convertedDocs.map(d => ({title: d.metadata.Dokumento_pavadinimas, uuid: d.metadata.uuid}))
-        );
-        
+        console.log('Loaded recent projects:', convertedDocs.length);
         setRecentProjects(convertedDocs);
       }
     } catch (err) {
@@ -349,10 +368,6 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
                           {subject}
                         </p>
                       )}
-                      
-                      {doc.metadata.konkurso_id && (
-                        <p className="text-xs text-gray-500 mt-1">ID: {doc.metadata.konkurso_id}</p>
-                      )}
                     </div>
                     {expandable && (
                       <button 
@@ -367,32 +382,10 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
                     )}
                   </div>
                   
-                  {/* Document action button - FIXED to ensure proper UUID is passed */}
+                  {/* SINGLE BUTTON HANDLER for all document types */}
                   <div className="px-3 py-2 border-t border-gray-200 bg-white">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        
-                        console.log('DEBUG - Button click:', {
-                          docName,
-                          uuid: doc.metadata?.uuid,
-                          hasCallback: !!onDocumentFocus
-                        });
-                        
-                        setHighlightedDocId(docId);
-                        
-                        // The key fix: Make sure we pass the vectorstore UUID to create_direct_document_workflow
-                        if (onDocumentFocus && doc.metadata?.uuid) {
-                          console.log('Calling onDocumentFocus with UUID:', doc.metadata.uuid);
-                          onDocumentFocus(doc.metadata.uuid);
-                        } else {
-                          console.error('Missing UUID or onDocumentFocus!', {
-                            hasUUID: !!doc.metadata?.uuid,
-                            hasCallback: !!onDocumentFocus,
-                            metadata: doc.metadata
-                          });
-                        }
-                      }}
+                      onClick={handleDocumentFocus(doc)}
                       className={`w-full py-1.5 px-2 text-white text-sm rounded transition flex items-center justify-center
                         ${isHighlighted ? 'bg-[#1B4332] hover:bg-[#143026]' : 'bg-[#2D6A4F] hover:bg-[#1B4332]'}`}
                     >
