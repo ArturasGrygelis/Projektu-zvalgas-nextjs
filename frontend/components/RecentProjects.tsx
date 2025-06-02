@@ -1,17 +1,32 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import axios from 'axios';
-import { FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
-
-// Create a CSS module file if it doesn't exist yet
-// You may need to adjust this import to match your actual CSS file
 import styles from '../styles/RecentProjects.module.css';
+import { FaCalendarAlt, FaMapMarkerAlt, FaInfoCircle, FaRegFileAlt } from 'react-icons/fa';
 
+// Define proper types for projects
 interface Project {
   id: string;
   title: string;
   deadline: string;
   location: string;
   summary: string;
+  document_id?: string;
+  Dokumento_pavadinimas?: string;
+  dokumento_pavadinimas?: string;
+  Projekto_pavadinimas?: string;
+  projekto_pavadinimas?: string;
+  Dokumento_tipas?: string;
+  dokumento_tipas?: string;
+}
+
+// Define the expected API response types
+interface CitiesResponse {
+  cities: string[];
+}
+
+interface ProjectsResponse {
+  projects: Project[];
 }
 
 export default function RecentProjects() {
@@ -46,17 +61,27 @@ export default function RecentProjects() {
   const fetchProjects = async (cityFilter: string = "") => {
     try {
       setLoading(true);
-      console.log(`Fetching projects with filter: ${cityFilter}`);
       
       const url = cityFilter 
         ? `${API_URL}/api/recent-projects?city=${encodeURIComponent(cityFilter)}`
         : `${API_URL}/api/recent-projects`;
       
-      const response = await axios.get(url);
-      console.log("Projects response:", response.data);
+      const response = await axios.get<ProjectsResponse>(url);
       
       if (response.data && Array.isArray(response.data.projects)) {
-        setProjects(response.data.projects);
+        // Ensure consistent naming convention with DocumentSidebar
+        const processedProjects = response.data.projects.map(project => {
+          // Format projects to match DocumentSidebar naming
+          return {
+            ...project,
+            // Add standardized document title if not present
+            Dokumento_pavadinimas: project.Dokumento_pavadinimas || 
+              `Kvietimas pateikti pasiūlymą: ${project.location ? `${project.location} - ${project.title}` : project.title}`,
+            // Set document type
+            Dokumento_tipas: project.Dokumento_tipas || "Kvietimas"
+          };
+        });
+        setProjects(processedProjects);
       }
       
       setLoading(false);
@@ -70,10 +95,7 @@ export default function RecentProjects() {
   // Fetch cities from backend
   const fetchCities = async () => {
     try {
-      console.log("Fetching cities...");
-      
-      const response = await axios.get(`${API_URL}/api/cities`);
-      console.log("Cities response:", response.data);
+      const response = await axios.get<CitiesResponse>(`${API_URL}/api/cities`);
       
       if (response.data && Array.isArray(response.data.cities)) {
         setCities(response.data.cities);
@@ -108,26 +130,45 @@ export default function RecentProjects() {
       if (cityFilter && location !== cityFilter) {
         continue;
       }
+
+      const title = titles[i % titles.length];
+      const formattedDocName = `Kvietimas pateikti pasiūlymą: ${location} - ${title}`;
       
       projects.push({
         id: `test-${i + 1}`,
-        title: titles[i % titles.length],
+        title: title,
         deadline: new Date(Date.now() + (i + 1) * 86400000).toISOString(),
         location,
-        summary: `Testinis projektas #${i + 1}: Projekte numatyti energetinio efektyvumo didinimo darbai.`
+        summary: `Testinis projektas #${i + 1}: Projekte numatyti energetinio efektyvumo didinimo darbai.`,
+        document_id: `doc-${i + 1}`,
+        // Add fields that match DocumentSidebar naming
+        Dokumento_pavadinimas: formattedDocName,
+        Projekto_pavadinimas: title,
+        Dokumento_tipas: "Kvietimas"
       });
     }
     
     return projects;
   };
 
-  // Format date for display
+  // Format date for display - same as in DocumentSidebar
   const formatDate = (dateStr: string) => {
     try {
       if (!dateStr) return '';
+      
+      // Return as-is if already formatted in Lithuanian style
+      if (dateStr.includes('d.') && dateStr.includes('val.')) {
+        return dateStr;
+      }
+      
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return dateStr;
-      return date.toLocaleDateString('lt-LT');
+      
+      return date.toLocaleDateString('lt-LT', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
     } catch {
       return dateStr;
     }
@@ -138,9 +179,26 @@ export default function RecentProjects() {
     setSelectedCity(e.target.value);
   };
 
-  // Create URL for project details page
-  const createChatUrl = (project: Project) => {
-    return `/chat?query=${encodeURIComponent(`Projektas: ${project.title}`)}&project_id=${project.id}`;
+  // Get clean title without prefixes - same as in DocumentSidebar
+  const getCleanTitle = (docName: string): string => {
+    // Remove common prefixes
+    const prefixesToRemove = [
+      'Kvietimas pateikti pasiūlymą:', 
+      'Kvietimas teikti pasiūlymą:', 
+      'Kvietimas:',
+      'Dokumentas:'
+    ];
+    
+    let cleanTitle = docName;
+    
+    for (const prefix of prefixesToRemove) {
+      if (cleanTitle.startsWith(prefix)) {
+        cleanTitle = cleanTitle.substring(prefix.length).trim();
+        break;
+      }
+    }
+    
+    return cleanTitle;
   };
 
   return (
@@ -180,27 +238,72 @@ export default function RecentProjects() {
           </p>
         ) : (
           <ul className={styles.projectList}>
-            {projects.map((project) => (
-              <li key={project.id || Math.random().toString()} className={styles.projectCard}>
-                <h3 className={styles.projectTitle}>{project.title}</h3>
-                <div className={styles.projectMeta}>
-                  <span className={styles.deadline}>
-                    <FaCalendarAlt className={styles.icon} />
-                    {formatDate(project.deadline)}
-                  </span>
-                  {project.location && (
-                    <span className={styles.location}>
-                      <FaMapMarkerAlt className={styles.icon} />
-                      {project.location}
-                    </span>
-                  )}
-                </div>
-                <p className={styles.summary}>{project.summary}</p>
-                <a href={createChatUrl(project)} className={styles.moreLink}>
-                  Sužinoti daugiau
-                </a>
-              </li>
-            ))}
+            {projects.map((project) => {
+              // Get document name using the same pattern as DocumentSidebar
+              const fullDocName = project.Dokumento_pavadinimas || 
+                                  project.dokumento_pavadinimas || 
+                                  `Kvietimas pateikti pasiūlymą: ${project.location ? `${project.location} - ${project.title}` : project.title}`;
+                                  
+              // Clean the title for display using same logic as DocumentSidebar
+              const cleanTitle = getCleanTitle(fullDocName);
+              
+              // Format date using the same pattern as DocumentSidebar
+              const formattedDate = formatDate(project.deadline);
+              const dateString = formattedDate ? `Pasiūlymą pateikti iki: ${formattedDate}` : null;
+              
+              return (
+                <li key={project.id || Math.random().toString()} className={styles.projectCard}>
+                  {/* Match DocumentSidebar's document header structure */}
+                  <div className={styles.docHeader}>
+                    {/* Document type badge and icon - matching DocumentSidebar */}
+                    <div className={styles.docTypeWrapper}>
+                      <div className={styles.docTypeIcon}>
+                        <FaRegFileAlt />
+                      </div>
+                      <div className={styles.docTypeInfo}>
+                        <div className={styles.docType}>
+                          {project.Dokumento_tipas || "Kvietimas"}
+                        </div>
+                        {dateString && (
+                          <div className={styles.docDate}>
+                            {dateString}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Document title - using cleaned title */}
+                    <h3 className={styles.projectTitle}>{cleanTitle}</h3>
+                    
+                    {/* Location - same as DocumentSidebar */}
+                    {project.location && (
+                      <div className={styles.location}>
+                        <FaMapMarkerAlt className={styles.icon} />
+                        <span>{project.location}</span>
+                      </div>
+                    )}
+                    
+                    {/* Summary - same text treatment as DocumentSidebar */}
+                    {project.summary && (
+                      <p className={styles.summary}>{project.summary}</p>
+                    )}
+                    
+                    {/* Action button - styled to match DocumentSidebar's button */}
+                    <div className={styles.actionLinks}>
+                      <Link 
+                        href={project.document_id 
+                          ? `/chat?documentId=${encodeURIComponent(project.document_id)}` 
+                          : `/chat?question=${encodeURIComponent(`Išsami informacija apie: ${project.title}`)}`
+                        }
+                        className={styles.actionButton}
+                      >
+                        <span>Klauskite apie šį dokumentą</span>
+                      </Link>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

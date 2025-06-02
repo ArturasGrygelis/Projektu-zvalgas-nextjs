@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FaFileAlt, FaChevronDown, FaChevronRight, FaCalendarAlt, FaSearch, FaMapMarkerAlt, FaFileContract } from 'react-icons/fa';
+import { FaFileAlt, FaChevronDown, FaChevronRight, FaCalendarAlt, FaSearch, FaMapMarkerAlt, FaFileContract, FaRegFileAlt } from 'react-icons/fa';
 
+// Define interfaces
 interface SourceDoc {
   page_content: string;
   metadata: Record<string, any>;
@@ -21,6 +22,10 @@ interface Project {
   deadline: string;
   location: string;
   summary: string;
+  Dokumento_pavadinimas?: string;
+  dokumento_pavadinimas?: string;
+  Projekto_pavadinimas?: string;
+  projekto_pavadinimas?: string;
 }
 
 interface ProjectsResponse {
@@ -34,6 +39,7 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
   expandable = false,
   initialDocumentId
 }) => {
+  // State
   const [recentProjects, setRecentProjects] = useState<SourceDoc[]>([]);
   const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -43,21 +49,22 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
   // API base URL from environment variable or default
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   
-  // Load test projects immediately on component mount
+  // Initialize with test data and fetch real data
   useEffect(() => {
-    // Set some initial test data to ensure something is displayed
-    const testProjects = generateTestProjects();
-    setRecentProjects(convertProjectsToSourceDocs(testProjects));
+    // Set initial test data to ensure users see something immediately
+    setRecentProjects(convertProjectsToSourceDocs(generateTestProjects()));
     
-    // Then try to fetch actual data
+    // Then fetch actual data
     fetchRecentProjects();
   }, []);
   
-  // Handle initial document ID
+  // Handle initial document ID for highlighting
   useEffect(() => {
     if (initialDocumentId) {
       setHighlightedDocId(initialDocumentId);
       setExpandedDocs(prev => ({ ...prev, [initialDocumentId]: true }));
+      
+      // Scroll to highlighted document
       setTimeout(() => {
         const docElement = document.getElementById(`doc-${initialDocumentId}`);
         if (docElement) docElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -65,32 +72,29 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     }
   }, [initialDocumentId]);
   
-  // UNIFIED CLICK HANDLER - Use this for ALL document types
+  // Document focus handler
   const handleDocumentFocus = (doc: SourceDoc) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    const docId = doc.metadata?.uuid;
-    console.log('UNIFIED HANDLER: Document focus with UUID:', docId);
+    const docId = doc.metadata?.uuid || doc.metadata?.id;
+    if (!docId) {
+      console.error('Missing document ID');
+      return;
+    }
     
-    // Highlight the document
+    // Highlight the document locally
     setHighlightedDocId(docId);
     
-    // Call the workflow with the document UUID
-    if (onDocumentFocus && docId) {
+    // Call the parent handler to focus on this document
+    if (onDocumentFocus) {
       onDocumentFocus(docId);
-      console.log('✅ Called onDocumentFocus with UUID:', docId);
-    } else {
-      console.error('❌ Missing UUID or handler', {
-        hasDocId: !!docId,
-        hasHandler: !!onDocumentFocus
-      });
     }
   };
   
-  // Generate test projects for immediate display - same as RecentProjects.tsx
-  const generateTestProjects = (cityFilter: string = ""): Project[] => {
-    const allCities = ["Vilnius", "Kaunas", "Klaipėda", "Šiauliai", "Panevėžys"];
+  // Generate test projects for immediate display
+  const generateTestProjects = (): Project[] => {
+    const cities = ["Vilnius", "Kaunas", "Klaipėda", "Šiauliai", "Panevėžys"];
     const titles = [
       "Renovacija - Daugiabučio modernizavimas",
       "Statyba - Administracinio pastato rekonstrukcija",
@@ -99,71 +103,77 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
       "Renovacija - Kultūros centro atnaujinimas"
     ];
     
-    const projects = [];
-    
-    for (let i = 0; i < 5; i++) {
-      const location = allCities[i % allCities.length];
-      
-      // Skip if filtering by city and doesn't match
-      if (cityFilter && location !== cityFilter) {
-        continue;
-      }
-      
-      projects.push({
-        id: `test-${i + 1}`,
-        title: titles[i % titles.length],
-        deadline: new Date(Date.now() + (i + 1) * 86400000).toISOString(),
-        location,
-        summary: `Testinis projektas #${i + 1}: Projekte numatyti energetinio efektyvumo didinimo darbai.`
-      });
-    }
-    
-    return projects;
+    return Array.from({ length: 5 }, (_, i) => ({
+      id: `test-${i + 1}`,
+      title: titles[i % titles.length],
+      deadline: new Date(Date.now() + (i + 1) * 86400000).toISOString(),
+      location: cities[i % cities.length],
+      summary: `Testinis projektas #${i + 1}: Projekte numatyti energetinio efektyvumo didinimo darbai.`,
+      // Add the key fields that match query document naming patterns
+      Dokumento_pavadinimas: `${cities[i % cities.length]} - ${titles[i % titles.length]}`,
+      Projekto_pavadinimas: titles[i % titles.length]
+    }));
   };
 
-  // Convert Project objects to SourceDoc format
+  // Convert Project objects to SourceDoc format with consistent naming for both sources
   const convertProjectsToSourceDocs = (projects: Project[]): SourceDoc[] => {
     return projects.map(project => {
-      // Try to extract a proper document title from the summary/content
-      const extractedTitle = extractTitleFromContent(project.summary || '');
+      // Create a uniform naming hierarchy for documents
       
-      // Use extracted title if available, otherwise fall back to API title
-      const documentTitle = extractedTitle || project.title;
+      // 1. First choice: use explicit Dokumento_pavadinimas from API if available
+      const dokPavadinimas = project.Dokumento_pavadinimas || project.dokumento_pavadinimas;
+      
+      // 2. Second choice: use Projekto_pavadinimas from API if available
+      const projPavadinimas = project.Projekto_pavadinimas || project.projekto_pavadinimas;
+      
+      // 3. Third choice: combine location and title for a more descriptive name
+      const combinedTitle = project.location ? 
+        `${project.location} - ${project.title}` : 
+        project.title;
+      
+      // Use the best available title based on priority
+      const bestTitle = dokPavadinimas || projPavadinimas || combinedTitle;
+      
+      // Format to match query result documents: "Kvietimas: Title"
+      // And standardize the document type prefix
+      const formattedTitle = bestTitle.startsWith('Kvietimas') ? 
+        bestTitle : 
+        `Kvietimas pateikti pasiūlymą: ${bestTitle}`;
       
       return {
         page_content: project.summary || "",
         metadata: {
-          // UUID for workflow - MUST BE THE VECTORSTORE UUID
+          // Essential IDs
           uuid: project.id,
           id: project.id,
           
-          // Use the determined document title (extracted from content or API title)
-          Dokumento_pavadinimas: documentTitle,
-          dokumento_pavadinimas: documentTitle,
+          // STANDARDIZED NAMING: Primary document title fields
+          // These are the fields checked by query results (prioritize the same as backend)
+          Dokumento_pavadinimas: formattedTitle,
+          dokumento_pavadinimas: formattedTitle,
           
-          // Keep project-specific fields with original API title
+          // Project specific fields
           Projekto_pavadinimas: project.title,
           projekto_pavadinimas: project.title,
           
-          // Additional title fields for compatibility
-          file_name: documentTitle,
-          pavadinimas: documentTitle,
-          title: documentTitle,
-          name: documentTitle,
+          // Other name fields for compatibility
+          file_name: formattedTitle,
+          pavadinimas: formattedTitle,
+          title: formattedTitle,
+          name: formattedTitle,
           
-          // Location fields in all variations
+          // Location fields
           Miestas: project.location?.split(',').pop()?.trim() || '',
           miestas: project.location?.split(',').pop()?.trim() || '',
           Vieta: project.location || '',
           vieta: project.location || '',
-          
-          // Try to extract street from location if it has commas
           Gatvė: project.location?.includes(',') ? 
             project.location.split(',').slice(0, -1).join(',').trim() : '',
           gatvė: project.location?.includes(',') ? 
             project.location.split(',').slice(0, -1).join(',').trim() : '',
+          data_objektas: project.location,
           
-          // Deadline fields in all variations
+          // Deadline fields - unified naming
           Pasiulyma_pateikti_iki: project.deadline,
           pasiulyma_pateikti_iki: project.deadline,
           Pateikti_projekta_iki: project.deadline,
@@ -172,80 +182,62 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
           terminas: project.deadline,
           deadline: project.deadline,
           
-          // Other needed fields
-          data_objektas: project.location,
+          // Type fields
           Dokumento_tipas: "Kvietimas",
           dokumento_tipas: "Kvietimas",
           konkurso_id: project.id,
+          
+          // File type info for icon display
+          file_type: "pdf",
+          
+          // Source tracking
           _source: "recent_projects"
         }
       };
     });
   };
-
-  // Helper function to extract document title from page content as fallback
-  const extractTitleFromContent = (content: string): string | null => {
-    if (!content || content.trim().length === 0) return null;
-    
-    // Look for common patterns in Lithuanian documents
-    const patterns = [
-      /(?:KVIETIMAS|Kvietimas)\s+(?:pateikti\s+)?(?:pasiūlymą?|pasiūlymus?)\s+(.+?)(?:\n|$)/i,
-      /(?:PRANEŠIMAS|Pranešimas)\s+(.+?)(?:\n|$)/i,
-      /(?:KONKURSAS|Konkursas)\s+(.+?)(?:\n|$)/i,
-      /(?:SKELBIAMAS|Skelbiamas)\s+(.+?)(?:\n|$)/i,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = content.match(pattern);
-      if (match && match[1] && match[1].trim().length > 10) {
-        let extracted = match[1].trim();
-        // Clean up common endings
-        extracted = extracted.replace(/\s*(\.|\,|\;|\:)\s*$/, '');
-        // Limit length
-        if (extracted.length > 100) {
-          extracted = extracted.substring(0, 97) + '...';
-        }
-        return extracted;
-      }
-    }
-    
-    // If no pattern matches, try to get the first meaningful line
-    const lines = content.split('\n').filter(line => line.trim().length > 20);
-    if (lines.length > 0) {
-      let firstLine = lines[0].trim();
-      if (firstLine.length > 100) {
-        firstLine = firstLine.substring(0, 97) + '...';
-      }
-      return firstLine;
-    }
-    
-    return null;
-  };
   
-  // Function to fetch recent projects with consistent naming - similar to RecentProjects.tsx
+  // Fetch recent projects from API
   const fetchRecentProjects = async () => {
     try {
       setIsLoading(true);
-      console.log(`Fetching projects for DocumentSidebar from ${API_URL}/api/recent-projects`);
       
-      // Use the API_URL for direct communication with backend
+      // Direct API call to backend
       const response = await axios.get<ProjectsResponse>(`${API_URL}/api/recent-projects`);
       
-      if (response.data && Array.isArray(response.data.projects)) {
-        console.log('📊 Raw project data from API:', response.data.projects);
-        // Convert the projects to SourceDoc format
-        const convertedDocs = convertProjectsToSourceDocs(response.data.projects);
-        console.log('📊 Total loaded recent projects:', convertedDocs.length);
+      if (response.data?.projects?.length) {
+        // Process projects to ensure they have consistent naming with query results
+        const processedProjects = response.data.projects.map(project => {
+          // Check if we need to enhance the title with location
+          const shouldIncludeLocation = 
+            !project.Dokumento_pavadinimas && 
+            !project.dokumento_pavadinimas && 
+            project.location && 
+            !project.title.includes(project.location);
+          
+          // Add a properly formatted document title if one doesn't exist
+          if (shouldIncludeLocation) {
+            return {
+              ...project,
+              Dokumento_pavadinimas: `${project.location} - ${project.title}`
+            };
+          }
+          return project;
+        });
+        
+        // Convert projects to source docs format and store
+        const convertedDocs = convertProjectsToSourceDocs(processedProjects);
         setRecentProjects(convertedDocs);
       }
     } catch (err) {
-      console.error('❌ Failed to fetch recent projects:', err);
-      // Keep the test data that was already set
+      console.error('Failed to fetch recent projects:', err);
+      // Keep test data as fallback
     } finally {
       setIsLoading(false);
     }
   };
   
+  // Toggle document expansion
   const toggleDocument = (docId: string) => {
     setExpandedDocs(prev => ({ ...prev, [docId]: !prev[docId] }));
   };
@@ -255,9 +247,9 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     return doc.metadata?.uuid || doc.metadata?.id || `doc-${Math.random().toString(36).substring(2, 9)}`;
   };
 
-  // Improved name extraction with consistent priority order
+  // Get document name with prioritization - now consistent between sources
   const getDetailedDocName = (doc: SourceDoc): string => {
-    // Priority 1: Use the document title fields (same as query results)
+    // First priority: Use explicit document title fields (same as backend)
     if (doc.metadata?.Dokumento_pavadinimas) {
       return doc.metadata.Dokumento_pavadinimas;
     }
@@ -266,15 +258,16 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
       return doc.metadata.dokumento_pavadinimas;
     }
     
-    // Priority 2: Try to extract from page content as fallback
-    if (doc.page_content) {
-      const extractedTitle = extractTitleFromContent(doc.page_content);
-      if (extractedTitle) {
-        return extractedTitle;
-      }
+    // Second priority: Use project title fields
+    if (doc.metadata?.Projekto_pavadinimas) {
+      return doc.metadata.Projekto_pavadinimas;
     }
     
-    // Priority 3: Use document file fields
+    if (doc.metadata?.projekto_pavadinimas) {
+      return doc.metadata.projekto_pavadinimas;
+    }
+    
+    // Third priority: Check file name fields
     if (doc.metadata?.Dokumento_failas) {
       return doc.metadata.Dokumento_failas;
     }
@@ -283,32 +276,58 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
       return doc.metadata.file_name;
     }
     
-    // Priority 4: Fall back to project/other name fields
-    const fallbackName = doc.metadata?.Projekto_pavadinimas ||
-                         doc.metadata?.projekto_pavadinimas ||
-                         doc.metadata?.pavadinimas ||
-                         doc.metadata?.title ||
-                         doc.metadata?.name;
-    
-    if (fallbackName) {
-      return fallbackName;
+    // Fourth priority: Check other title fields
+    if (doc.metadata?.pavadinimas) {
+      return doc.metadata.pavadinimas;
     }
     
-    // Priority 5: Construct from location if available
+    if (doc.metadata?.title) {
+      return doc.metadata.title;
+    }
+    
+    if (doc.metadata?.name) {
+      return doc.metadata.name;
+    }
+    
+    // Last resort: Try to build from location data
     if (doc.metadata?.data_objektas) {
       return `Kvietimas pateikti pasiūlymą adresu ${doc.metadata.data_objektas}`;
     }
     
-    // Last resort
+    // Default fallback
     return "Nežinomas dokumentas";
   };
+  
+  // Extract main title without document type prefix for better display
+  const getCleanTitle = (docName: string): string => {
+    // Remove common prefixes
+    const prefixesToRemove = [
+      'Kvietimas pateikti pasiūlymą:', 
+      'Kvietimas teikti pasiūlymą:', 
+      'Kvietimas:',
+      'Dokumentas:'
+    ];
+    
+    let cleanTitle = docName;
+    
+    for (const prefix of prefixesToRemove) {
+      if (cleanTitle.startsWith(prefix)) {
+        cleanTitle = cleanTitle.substring(prefix.length).trim();
+        break;
+      }
+    }
+    
+    return cleanTitle;
+  };
 
-  const getDocumentType = (doc: SourceDoc): string | null => {
+  // Get document type
+  const getDocumentType = (doc: SourceDoc): string => {
     return doc.metadata?.Dokumento_tipas || 
            doc.metadata?.dokumento_tipas || 
            "Kvietimas";
   };
 
+  // Get document city
   const getCity = (doc: SourceDoc): string | null => {
     return doc.metadata?.Miestas || 
            doc.metadata?.miestas || 
@@ -317,22 +336,31 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
            null;
   };
 
+  // Get document street
   const getStreet = (doc: SourceDoc): string | null => {
     return doc.metadata?.Gatvė || 
            doc.metadata?.gatvė || 
            null;
   };
 
+  // Get document subject
   const getSubject = (doc: SourceDoc): string | null => {
     return doc.metadata?.Kreipiamasi_dėl || 
            doc.metadata?.kreipiamasi_dėl || 
            null;
   };
   
+  // Get document file type for icon display
+  const getFileType = (doc: SourceDoc): string => {
+    return doc.metadata?.file_type || 'pdf';
+  };
+  
+  // Format date for display
   const formatDate = (dateStr: string | undefined): string | null => {
     if (!dateStr) return null;
     
     try {
+      // Return as-is if already formatted in Lithuanian style
       if (dateStr.includes('d.') && dateStr.includes('val.')) {
         return dateStr;
       }
@@ -351,21 +379,17 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     }
   };
   
-  // Use propDocuments if available (from query), otherwise use recent projects
-  const documentsToShow = propDocuments && propDocuments.length > 0 ? propDocuments : recentProjects;
-  
-  console.log('📋 Documents to show:', documentsToShow.length);
-  console.log('📋 PropDocuments length:', propDocuments?.length || 0);
-  console.log('📋 RecentProjects length:', recentProjects.length);
+  // Determine which documents to show - props or recently fetched
+  const documentsToShow = propDocuments?.length > 0 ? propDocuments : recentProjects;
   
   // Filter documents based on search query
   const filteredDocuments = documentsToShow.filter(doc => {
     if (!searchQuery.trim()) return true;
     
+    const query = searchQuery.toLowerCase();
     const docName = getDetailedDocName(doc).toLowerCase();
     const city = getCity(doc)?.toLowerCase() || '';
     const subject = getSubject(doc)?.toLowerCase() || '';
-    const query = searchQuery.toLowerCase();
     
     return docName.includes(query) || city.includes(query) || subject.includes(query);
   });
@@ -399,22 +423,28 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
           <div className="flex justify-center items-center h-24">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#2D6A4F]"></div>
           </div>
-        ) : filteredDocuments && filteredDocuments.length > 0 ? (
+        ) : filteredDocuments?.length > 0 ? (
           <ul className="space-y-3">
             {filteredDocuments.map((doc, index) => {
+              // Get document properties
               const docId = getDocId(doc);
-              const isExpanded = expandedDocs[docId];
-              const docName = getDetailedDocName(doc);
+              const isExpanded = expandedDocs[docId] || false;
+              const fullDocName = getDetailedDocName(doc);
               const isHighlighted = highlightedDocId === docId;
               
-              // Extract information using the exact metadata field names
+              // Clean the title for display 
+              const docName = getCleanTitle(fullDocName);
+              
+              // Get file type
+              const fileType = getFileType(doc);
+              
+              // Get document metadata
               const proposalDeadline = doc.metadata?.Pasiulyma_pateikti_iki || 
                                       doc.metadata?.pasiulyma_pateikti_iki || 
                                       doc.metadata?.Pateikti_projekta_iki || 
                                       doc.metadata?.pateikti_iki || 
                                       doc.metadata?.deadline;
-              const formattedProposalDeadline = proposalDeadline ? formatDate(proposalDeadline) : null;
-              
+              const formattedDeadline = formatDate(proposalDeadline);
               const city = getCity(doc);
               const street = getStreet(doc);
               const documentType = getDocumentType(doc);
@@ -423,92 +453,80 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
               // Combine location information
               const location = [street, city].filter(Boolean).join(', ') || doc.metadata?.data_objektas;
               
+              // Generate a document date string for display
+              const dateString = formattedDeadline ? `Pasiūlymą pateikti iki: ${formattedDeadline}` : null;
+              
               return (
                 <li 
                   key={`${docId}-${index}`} 
                   id={`doc-${docId}`}
-                  className={`border rounded-lg overflow-hidden transition-all duration-200
-                    ${isHighlighted ? 'border-[#2D6A4F] shadow-md ring-2 ring-[#2D6A4F]/20' : 'border-gray-200'}`}
+                  className="bg-white rounded-lg overflow-hidden border border-gray-200"
                 >
-                  {/* Document header */}
-                  <div 
-                    className={`p-3 flex items-start cursor-pointer transition
-                      ${isHighlighted ? 'bg-[#E6F3EC]' : 'bg-gray-50 hover:bg-gray-100'}`}
-                    onClick={() => onDocumentClick(doc)}
-                  >
-                    <FaFileAlt className={`mt-1 mr-2 flex-shrink-0 ${isHighlighted ? 'text-[#1B4332]' : 'text-[#2D6A4F]'}`} />
-                    <div className="flex-grow">
-                      {/* Document type */}
-                      {documentType && (
-                        <div className="flex items-center mb-1 text-xs">
-                          <FaFileContract className="text-purple-500 mr-1 flex-shrink-0" />
-                          <span className="text-purple-700 font-medium">{documentType}</span>
-                        </div>
-                      )}
+                  {/* Document header - main clickable card */}
+                  <div className="p-3">
+                    {/* Document type badge */}
+                    <div className="flex items-center mb-2">
+                      <div className="flex-shrink-0 mr-2">
+                        {fileType === 'pdf' ? (
+                          <div className="bg-[#F87171]/10 p-1.5 rounded text-[#F87171]">
+                            <FaRegFileAlt size={16} />
+                          </div>
+                        ) : (
+                          <div className="bg-[#3B82F6]/10 p-1.5 rounded text-[#3B82F6]">
+                            <FaFileAlt size={16} />
+                          </div>
+                        )}
+                      </div>
                       
-                      {/* Proposal submission deadline */}
-                      {formattedProposalDeadline && (
-                        <div className="flex items-center mb-1 text-xs">
-                          <FaCalendarAlt className="text-blue-500 mr-1 flex-shrink-0" />
-                          <span className="text-blue-700 font-medium">Pasiūlymą pateikti iki: {formattedProposalDeadline}</span>
+                      <div className="flex flex-col">
+                        {/* Document type badge */}
+                        <div className="text-xs text-[#4F46E5] font-medium">
+                          {documentType || "Kvietimas"}
                         </div>
-                      )}
-                      
-                      {/* Document title - now consistent between recent and related documents */}
-                      <p className={`font-medium text-sm ${isHighlighted ? 'text-[#1B4332]' : 'text-[#1A3A5E]'} break-words whitespace-normal leading-tight`}>
+
+                        {/* Submission deadline */}
+                        {dateString && (
+                          <div className="text-xs text-gray-500">
+                            {dateString}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Document title - main clickable item */}
+                    <div 
+                      onClick={() => onDocumentClick(doc)}
+                      className="cursor-pointer"
+                    >
+                      <h3 className="font-medium text-sm text-[#1A3A5E] mb-1.5 leading-tight">
                         {docName}
-                      </p>
+                      </h3>
                       
-                      {/* Location information */}
+                      {/* Location */}
                       {location && (
-                        <div className="flex items-center mt-1 text-xs">
-                          <FaMapMarkerAlt className="text-green-500 mr-1 flex-shrink-0" />
-                          <span className="text-gray-600">{location}</span>
+                        <div className="flex items-center mb-2 text-xs text-gray-500">
+                          <FaMapMarkerAlt size={10} className="mr-1 text-[#2D6A4F]" />
+                          <span>{location}</span>
                         </div>
                       )}
                       
-                      {/* Subject */}
-                      {subject && (
-                        <p className="text-xs text-gray-500 mt-1 italic">
-                          {subject}
+                      {/* Document preview - limited to 2 lines */}
+                      {doc.page_content && (
+                        <p className="text-xs text-gray-500 line-clamp-2 mb-3">
+                          {doc.page_content.substring(0, 120)}
+                          {doc.page_content.length > 120 ? '...' : ''}
                         </p>
                       )}
                     </div>
-                    {expandable && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleDocument(docId);
-                        }}
-                        className="ml-2 text-gray-400 hover:text-gray-600"
-                      >
-                        {isExpanded ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* SINGLE BUTTON HANDLER for all document types */}
-                  <div className="px-3 py-2 border-t border-gray-200 bg-white">
+                    
+                    {/* Ask about document button */}
                     <button
                       onClick={handleDocumentFocus(doc)}
-                      className={`w-full py-1.5 px-2 text-white text-sm rounded transition flex items-center justify-center
-                        ${isHighlighted ? 'bg-[#1B4332] hover:bg-[#143026]' : 'bg-[#2D6A4F] hover:bg-[#1B4332]'}`}
+                      className="w-full py-2 px-3 text-white text-sm rounded transition flex items-center justify-center bg-[#2D6A4F] hover:bg-[#1B4332]"
                     >
                       <span>Klauskite apie šį dokumentą</span>
                     </button>
                   </div>
-                  
-                  {/* Document content (when expanded) */}
-                  {expandable && isExpanded && (
-                    <div className="p-3 text-sm bg-white border-t border-gray-200">
-                      <div className="max-h-32 overflow-y-auto">
-                        <p className="text-gray-600 whitespace-pre-line">
-                          {doc.page_content ? doc.page_content.substring(0, 300) : 'Turinys neprieinamas'}
-                          {doc.page_content && doc.page_content.length > 300 ? '...' : ''}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </li>
               );
             })}

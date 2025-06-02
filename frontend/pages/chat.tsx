@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, FormEvent } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import axios from 'axios';
@@ -73,6 +73,7 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
   // Hard-coded model selection
   const selectedModel = "meta-llama/llama-4-scout-17b-16e-instruct";
   
@@ -108,6 +109,8 @@ export default function Chat() {
           _source: "query_results" 
         } as Record<string, any>
       }));
+      
+      // Combine summary docs with recent projects, avoiding duplicates
       setAllDocuments([
         ...markedSummaryDocs,
         ...recentProjects.filter(recentDoc => 
@@ -121,56 +124,116 @@ export default function Chat() {
     }
   }, [summaryDocuments, recentProjects]);
 
-  // Function to fetch recent projects with unified metadata mapping
+  // Helper function to extract document title from page content
+  const extractTitleFromContent = (content: string): string | null => {
+    if (!content || content.trim().length === 0) return null;
+    
+    // Look for common patterns in Lithuanian documents
+    const patterns = [
+      /(?:KVIETIMAS|Kvietimas)\s+(?:pateikti\s+)?(?:pasiūlymą?|pasiūlymus?)\s+(.+?)(?:\n|$)/i,
+      /(?:PRANEŠIMAS|Pranešimas)\s+(.+?)(?:\n|$)/i,
+      /(?:KONKURSAS|Konkursas)\s+(.+?)(?:\n|$)/i,
+      /(?:SKELBIAMAS|Skelbiamas)\s+(.+?)(?:\n|$)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match && match[1] && match[1].trim().length > 10) {
+        let extracted = match[1].trim();
+        // Clean up common endings
+        extracted = extracted.replace(/\s*(\.|\,|\;|\:)\s*$/, '');
+        // Limit length
+        if (extracted.length > 100) {
+          extracted = extracted.substring(0, 97) + '...';
+        }
+        return extracted;
+      }
+    }
+    
+    // If no pattern matches, try to get the first meaningful line
+    const lines = content.split('\n').filter(line => line.trim().length > 20);
+    if (lines.length > 0) {
+      let firstLine = lines[0].trim();
+      if (firstLine.length > 100) {
+        firstLine = firstLine.substring(0, 97) + '...';
+      }
+      return firstLine;
+    }
+    
+    return null;
+  };
+
+  // Function to fetch recent projects with optimized metadata mapping
   const fetchRecentProjects = async () => {
     try {
       const response = await axios.get<RecentProjectsResponse>(`${API_URL}/api/recent-projects`);
-      if (response.data && Array.isArray(response.data.projects)) {
+      
+      if (response.data?.projects?.length) {
         const convertedDocs = response.data.projects.map(project => {
-          // Prioritize Dokumento_pavadinimas which contains the full document name
+          // Extract title from content/summary if available
+          let extractedTitle = "";
+          if (project.summary) {
+            extractedTitle = extractTitleFromContent(project.summary) || "";
+          }
+
+          // Choose the best document name available
           const documentName = 
-            project.Dokumento_pavadinimas ||
+            project.Dokumento_pavadinimas || 
+            extractedTitle ||
             project.Dokumento_failas ||
             project.file_name ||
             project.title ||
-            "";
+            (project.location ? `Kvietimas pateikti pasiūlymą adresu ${project.location}` : 
+            "Kvietimas pateikti pasiūlymą");
+            
+          // Create a base metadata object with original project fields
+          const metadata: Record<string, any> = {
+            // Preserve original fields that exist in the project
+            ...project,
+            // Essential identification fields
+            uuid: project.id,
+            id: project.id,
+            _source: "recent_projects"
+          };
+          
+          // Add only missing standard fields needed by the system
+          if (!metadata.Dokumento_pavadinimas) metadata.Dokumento_pavadinimas = documentName;
+          if (!metadata.dokumento_pavadinimas) metadata.dokumento_pavadinimas = documentName;
+          if (!metadata.Dokumento_tipas) metadata.Dokumento_tipas = "Kvietimas";
+          if (!metadata.dokumento_tipas) metadata.dokumento_tipas = "Kvietimas";
+          
+          // Parse location into components only if needed and not already present
+          if (project.location && !metadata.Miestas) {
+            metadata.Miestas = project.location.split(',').pop()?.trim() || '';
+            metadata.miestas = metadata.Miestas;
+            metadata.Vieta = project.location;
+            metadata.vieta = project.location;
+            
+            if (project.location.includes(',')) {
+              const street = project.location.split(',').slice(0, -1).join(',').trim();
+              metadata.Gatvė = street;
+              metadata.gatvė = street;
+            }
+          }
+          
+          // Set data_objektas if it doesn't exist
+          if (project.location && !metadata.data_objektas) {
+            metadata.data_objektas = project.location;
+          }
+          
+          // Standardize deadline fields if a deadline exists
+          if (project.deadline && !metadata.Pasiulyma_pateikti_iki) {
+            metadata.Pasiulyma_pateikti_iki = project.deadline;
+            metadata.pasiulyma_pateikti_iki = project.deadline;
+            metadata.deadline = project.deadline;
+          }
 
           return {
             page_content: project.summary || "",
-            metadata: {
-              uuid: project.id,
-              id: project.id,
-              // Use the full document name for all name fields
-              Dokumento_pavadinimas: documentName,
-              dokumento_pavadinimas: documentName,
-              Dokumento_failas: documentName,
-              file_name: documentName,
-              Projekto_pavadinimas: documentName,
-              projekto_pavadinimas: documentName,
-              pavadinimas: documentName,
-              title: documentName,
-              name: documentName,
-              Miestas: project.location?.split(',').pop()?.trim() || '',
-              miestas: project.location?.split(',').pop()?.trim() || '',
-              Vieta: project.location || '',
-              vieta: project.location || '',
-              Gatvė: project.location?.includes(',') ? project.location.split(',').slice(0, -1).join(',').trim() : '',
-              gatvė: project.location?.includes(',') ? project.location.split(',').slice(0, -1).join(',').trim() : '',
-              Pasiulyma_pateikti_iki: project.deadline,
-              pasiulyma_pateikti_iki: project.deadline,
-              Pateikti_projekta_iki: project.deadline,
-              pateikti_iki: project.deadline,
-              Terminas: project.deadline,
-              terminas: project.deadline,
-              deadline: project.deadline,
-              data_objektas: project.location,
-              Dokumento_tipas: "Kvietimas",
-              dokumento_tipas: "Kvietimas",
-              konkurso_id: project.id,
-              _source: "recent_projects"
-            }
+            metadata
           };
         });
+        
         setRecentProjects(convertedDocs);
         if (summaryDocuments.length === 0) {
           setAllDocuments(convertedDocs);
@@ -183,16 +246,39 @@ export default function Chat() {
 
   // Helper function to get best document name - prioritize Dokumento_pavadinimas
   const getDetailedDocName = (doc: SourceDoc): string => {
+    // First check if we have a page content to extract title from
+    if (doc.page_content && (!doc.metadata?.Dokumento_pavadinimas || doc.metadata?.Dokumento_pavadinimas === "Nežinomas dokumentas")) {
+      const extractedTitle = extractTitleFromContent(doc.page_content);
+      if (extractedTitle) {
+        // Update the metadata for future reference
+        if (doc.metadata) {
+          doc.metadata.Dokumento_pavadinimas = extractedTitle;
+          doc.metadata.dokumento_pavadinimas = extractedTitle;
+        }
+        return extractedTitle;
+      }
+    }
+    
     // Always prioritize Dokumento_pavadinimas first - this contains the full document name
-    if (doc.metadata?.Dokumento_pavadinimas) return doc.metadata.Dokumento_pavadinimas;
-    if (doc.metadata?.dokumento_pavadinimas) return doc.metadata.dokumento_pavadinimas;
-    if (doc.metadata?.Dokumento_failas) return doc.metadata.Dokumento_failas;
-    if (doc.metadata?.file_name) return doc.metadata.file_name;
-    if (doc.metadata?.Projekto_pavadinimas) return doc.metadata.Projekto_pavadinimas;
-    if (doc.metadata?.projekto_pavadinimas) return doc.metadata.projekto_pavadinimas;
-    if (doc.metadata?.pavadinimas) return doc.metadata.pavadinimas;
-    if (doc.metadata?.title) return doc.metadata.title;
-    if (doc.metadata?.name) return doc.metadata.name;
+    if (doc.metadata?.Dokumento_pavadinimas && doc.metadata.Dokumento_pavadinimas !== "Nežinomas dokumentas") 
+      return doc.metadata.Dokumento_pavadinimas;
+    if (doc.metadata?.dokumento_pavadinimas && doc.metadata.dokumento_pavadinimas !== "Nežinomas dokumentas") 
+      return doc.metadata.dokumento_pavadinimas;
+    if (doc.metadata?.Dokumento_failas) 
+      return doc.metadata.Dokumento_failas;
+    if (doc.metadata?.file_name) 
+      return doc.metadata.file_name;
+    if (doc.metadata?.Projekto_pavadinimas) 
+      return doc.metadata.Projekto_pavadinimas;
+    if (doc.metadata?.projekto_pavadinimas) 
+      return doc.metadata.projekto_pavadinimas;
+    if (doc.metadata?.pavadinimas) 
+      return doc.metadata.pavadinimas;
+    if (doc.metadata?.title) 
+      return doc.metadata.title;
+    if (doc.metadata?.name) 
+      return doc.metadata.name;
+    
     return "Nežinomas dokumentas";
   };
 
@@ -225,12 +311,21 @@ export default function Chat() {
       inputRef.current?.focus();
     } else {
       try {
-        // Changed endpoint to use document-workflow instead of create-direct-document-workflow
         const response = await axios.post<DirectDocumentResponse>(`${API_URL}/api/document-workflow`, {
           document_id: docId
         });
         if (response.data?.document) {
           const fetchedDoc = response.data.document;
+          
+          // Try to extract a better document name from content if needed
+          if (!fetchedDoc.metadata?.Dokumento_pavadinimas && fetchedDoc.page_content) {
+            const extractedTitle = extractTitleFromContent(fetchedDoc.page_content);
+            if (extractedTitle && fetchedDoc.metadata) {
+              fetchedDoc.metadata.Dokumento_pavadinimas = extractedTitle;
+              fetchedDoc.metadata.dokumento_pavadinimas = extractedTitle;
+            }
+          }
+          
           setFocusedDocumentId(docId);
           setFocusedDocument(fetchedDoc);
           const detailedDocName = getDetailedDocName(fetchedDoc);
@@ -292,6 +387,8 @@ export default function Chat() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+    
+    // Add user message to chat
     const userMessage: Message = {
       role: 'user',
       content: input,
@@ -300,34 +397,50 @@ export default function Chat() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    
+    // Reset input height
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
+    
     try {
-      const requestData: any = {
+      // Choose the appropriate endpoint based on whether a document is focused
+      // This is the key change to use create_direct_document_workflow
+      const endpoint = focusedDocumentId 
+        ? `${API_URL}/api/document-chat` 
+        : `${API_URL}/api/chat`;
+      
+      // Prepare request data
+      const requestData = {
         message: input,
         model_name: selectedModel,
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        ...(focusedDocumentId ? { document_id: focusedDocumentId } : {})
       };
-      if (focusedDocumentId) {
-        requestData.document_id = focusedDocumentId;
-      }
       
-      // Use a single chat endpoint for all requests, including document-focused ones
-      // The document_id in the request indicates if it's a document-focused query
-      const response = await axios.post<ChatApiResponse>(`${API_URL}/api/chat`, requestData, {
-        timeout: 120000
-      });
+      console.log(`Sending request to ${endpoint} with document_id: ${focusedDocumentId || 'none'}`);
       
+      // Make API request
+      const response = await axios.post<ChatApiResponse>(
+        endpoint, 
+        requestData, 
+        { timeout: 120000 }
+      );
+      
+      // Parse response timestamp
       let responseTimestamp = new Date();
       try {
         if (response.data.created_at) {
-          responseTimestamp = new Date(response.data.created_at);
-          if (isNaN(responseTimestamp.getTime())) {
-             responseTimestamp = new Date();
+          const timestamp = new Date(response.data.created_at);
+          if (!isNaN(timestamp.getTime())) {
+            responseTimestamp = timestamp;
           }
         }
-      } catch (dateError) {}
+      } catch (dateError) {
+        // Use default timestamp if parsing fails
+      }
+      
+      // Add response to messages
       setMessages(prev => [
         ...prev,
         {
@@ -337,16 +450,22 @@ export default function Chat() {
           sources: response.data.sources
         }
       ]);
-      if (response.data.summary_documents && response.data.summary_documents.length > 0) {
+      
+      // Only update documents if not in focused mode and if summary documents are provided
+      if (!focusedDocumentId && response.data.summary_documents?.length) {
         setSummaryDocuments(response.data.summary_documents);
       }
+      
+      // Store conversation ID if not already set
       if (!conversationId && response.data.conversation_id) {
         setConversationId(response.data.conversation_id);
       }
     } catch (error) {
+      // Handle error case
       const errorMessage = error instanceof Error 
         ? `Error: ${error.message}` 
         : `Error: ${String(error)}`;
+        
       setMessages(prev => [
         ...prev,
         {
@@ -356,6 +475,7 @@ export default function Chat() {
         }
       ]);
     } finally {
+      // Reset loading state and focus input
       setIsLoading(false);
       inputRef.current?.focus();
     }
@@ -366,6 +486,19 @@ export default function Chat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e as unknown as React.FormEvent);
+    }
+  };
+
+  // Test connection to API
+  const testConnection = async () => {
+    try {
+      const testResponse = await axios.post(`${API_URL}/api/chat`, {
+        message: "Test message",
+        model_name: selectedModel
+      });
+      alert(`Connection successful! Backend is responding.`);
+    } catch (error) {
+      alert(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -401,17 +534,7 @@ export default function Chat() {
               {showSidebar ? 'Slėpti dokumentus' : 'Rodyti dokumentus'}
             </button>
             <button 
-              onClick={async () => {
-                try {
-                  const testResponse = await axios.post(`${API_URL}/api/chat`, {
-                    message: "Test message",
-                    model_name: selectedModel
-                  });
-                  alert(`Test successful! Response: ${JSON.stringify(testResponse.data)}`);
-                } catch (error) {
-                  alert(`Test failed: ${error}`);
-                }
-              }}
+              onClick={testConnection}
               className="ml-2 px-3 py-1 bg-[#F4A261] text-[#1A3A5E] font-medium rounded text-sm hover:bg-[#FFB703] transition"
             >
               Testuoti Ryšį
@@ -420,9 +543,9 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* Main content area - exact calculation to match footer */}
+      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - stretches to footer */}
+        {/* Sidebar - conditionally shown */}
         {showSidebar && (
           <div className="hidden md:block md:w-1/4 lg:w-1/5 border-r border-gray-200 bg-white overflow-hidden">
             <DocumentSidebar 
@@ -436,7 +559,7 @@ export default function Chat() {
         
         {/* Main content with chat and input */}
         <div className="flex-grow flex flex-col">
-          {/* Chat messages area - takes most of the space */}
+          {/* Chat messages area */}
           <div className="flex-grow overflow-y-auto bg-white mb-1 border border-gray-100">
             <ChatBox messages={messages} />
             <div ref={messagesEndRef} />
@@ -464,7 +587,7 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Input area - positioned right above footer */}
+          {/* Input area */}
           <div className="border-t border-gray-200 pt-2 pb-2 px-4 bg-white">
             <form onSubmit={handleSubmit}>
               <div className="relative">
