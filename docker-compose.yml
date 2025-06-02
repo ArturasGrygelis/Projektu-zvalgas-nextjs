@@ -7,13 +7,23 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend:/app  # Mount local directory to container for live updates
+      - /app/node_modules  # Preserve node_modules in container
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for better file watching in Docker
+      - WATCHPACK_POLLING=true    # For webpack file watching in Docker
     depends_on:
       - backend
+    # Use development mode to enable hot reloading
+    command: npm run dev
+    # Add healthcheck for better container management
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   
   backend:
     build:
@@ -22,13 +32,20 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./backend:/app  # Mount local directory to container for live updates
       - ./docs:/app/docs 
       - ./docs2:/app/docs2 
       - ./.env:/app/.env
     environment:
       - NODE_ENV=development
+      - PYTHONDONTWRITEBYTECODE=1  # Don't generate .pyc files
+      - PYTHONUNBUFFERED=1         # Don't buffer Python output
     env_file:
       - ./.env  # Load environment variables from .env file
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    #aa
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+    # Add healthcheck for better container management
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
