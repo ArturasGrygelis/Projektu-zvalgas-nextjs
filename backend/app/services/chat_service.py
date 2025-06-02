@@ -28,12 +28,12 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         workflow = create_minimal_workflow(
             summaries_vectorstore=summaries_vectorstore,
             full_vectorstore=full_vectorstore,
-            k_sum=20,
+            k_sum=15,
             search_type="similarity",
             generator_name=model_name,
             generator_temperature=0.0,
             helper_name="meta-llama/llama-4-maverick-17b-128e-instruct",
-            helper_temperature=0.0
+            helper_temperature=0.1
         )
         
         # Execute workflow
@@ -59,12 +59,12 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
             ]
         
         summary_documents = None
-        if final_state.get("documents"):  # These are summary documents
+        if final_state.get("filtered_summaries"):
             summary_documents = [
                 SourceDocument(
                     page_content=doc.page_content,
                     metadata=doc.metadata or {}
-                ) for doc in final_state["documents"]
+                ) for doc in final_state["filtered_summaries"]
             ]
         
         return ChatResponse(
