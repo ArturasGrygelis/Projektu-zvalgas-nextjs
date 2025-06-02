@@ -118,26 +118,78 @@ export default function Chat() {
     }
   }, [summaryDocuments, recentProjects]);
 
+  // Helper function to extract document title from page content
+  const extractTitleFromContent = (content: string): string | null => {
+    if (!content || content.trim().length === 0) return null;
+    
+    // Look for common patterns in Lithuanian documents
+    const patterns = [
+      /(?:KVIETIMAS|Kvietimas)\s+(?:pateikti\s+)?(?:pasiūlymą?|pasiūlymus?)\s+(.+?)(?:\n|$)/i,
+      /(?:PRANEŠIMAS|Pranešimas)\s+(.+?)(?:\n|$)/i,
+      /(?:KONKURSAS|Konkursas)\s+(.+?)(?:\n|$)/i,
+      /(?:SKELBIAMAS|Skelbiamas)\s+(.+?)(?:\n|$)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match && match[1] && match[1].trim().length > 10) {
+        let extracted = match[1].trim();
+        // Clean up common endings
+        extracted = extracted.replace(/\s*(\.|\,|\;|\:)\s*$/, '');
+        // Limit length
+        if (extracted.length > 100) {
+          extracted = extracted.substring(0, 97) + '...';
+        }
+        return extracted;
+      }
+    }
+    
+    // If no pattern matches, try to get the first meaningful line
+    const lines = content.split('\n').filter(line => line.trim().length > 20);
+    if (lines.length > 0) {
+      let firstLine = lines[0].trim();
+      if (firstLine.length > 100) {
+        firstLine = firstLine.substring(0, 97) + '...';
+      }
+      return firstLine;
+    }
+    
+    return null;
+  };
+
   // Function to fetch recent projects with unified metadata mapping
   const fetchRecentProjects = async () => {
     try {
       const response = await axios.get<RecentProjectsResponse>('/api/recent-projects');
       if (response.data && Array.isArray(response.data.projects)) {
         const convertedDocs = response.data.projects.map(project => {
-          // Prioritize Dokumento_pavadinimas which contains the full document name
+          // Extract title from content/summary if available
+          let extractedTitle = "";
+          if (project.summary) {
+            extractedTitle = extractTitleFromContent(project.summary) || "";
+          }
+
+          // Choose the best document name available
           const documentName = 
-            project.Dokumento_pavadinimas ||
+            // First try to use project's own fields
+            project.Dokumento_pavadinimas || 
+            // Then try extracted title from content
+            extractedTitle ||
+            // Then use other fields
             project.Dokumento_failas ||
             project.file_name ||
             project.title ||
-            "";
+            // If location exists, create a meaningful name
+            (project.location ? `Kvietimas pateikti pasiūlymą adresu ${project.location}` : 
+            // Fallback
+            "Kvietimas pateikti pasiūlymą");
 
           return {
             page_content: project.summary || "",
             metadata: {
               uuid: project.id,
               id: project.id,
-              // Use the full document name for all name fields
+              // Use the full document name for all name fields to ensure consistency
               Dokumento_pavadinimas: documentName,
               dokumento_pavadinimas: documentName,
               Dokumento_failas: documentName,
@@ -180,16 +232,39 @@ export default function Chat() {
 
   // Helper function to get best document name - prioritize Dokumento_pavadinimas
   const getDetailedDocName = (doc: SourceDoc): string => {
+    // First check if we have a page content to extract title from
+    if (doc.page_content && (!doc.metadata?.Dokumento_pavadinimas || doc.metadata?.Dokumento_pavadinimas === "Nežinomas dokumentas")) {
+      const extractedTitle = extractTitleFromContent(doc.page_content);
+      if (extractedTitle) {
+        // Update the metadata for future reference
+        if (doc.metadata) {
+          doc.metadata.Dokumento_pavadinimas = extractedTitle;
+          doc.metadata.dokumento_pavadinimas = extractedTitle;
+        }
+        return extractedTitle;
+      }
+    }
+    
     // Always prioritize Dokumento_pavadinimas first - this contains the full document name
-    if (doc.metadata?.Dokumento_pavadinimas) return doc.metadata.Dokumento_pavadinimas;
-    if (doc.metadata?.dokumento_pavadinimas) return doc.metadata.dokumento_pavadinimas;
-    if (doc.metadata?.Dokumento_failas) return doc.metadata.Dokumento_failas;
-    if (doc.metadata?.file_name) return doc.metadata.file_name;
-    if (doc.metadata?.Projekto_pavadinimas) return doc.metadata.Projekto_pavadinimas;
-    if (doc.metadata?.projekto_pavadinimas) return doc.metadata.projekto_pavadinimas;
-    if (doc.metadata?.pavadinimas) return doc.metadata.pavadinimas;
-    if (doc.metadata?.title) return doc.metadata.title;
-    if (doc.metadata?.name) return doc.metadata.name;
+    if (doc.metadata?.Dokumento_pavadinimas && doc.metadata.Dokumento_pavadinimas !== "Nežinomas dokumentas") 
+      return doc.metadata.Dokumento_pavadinimas;
+    if (doc.metadata?.dokumento_pavadinimas && doc.metadata.dokumento_pavadinimas !== "Nežinomas dokumentas") 
+      return doc.metadata.dokumento_pavadinimas;
+    if (doc.metadata?.Dokumento_failas) 
+      return doc.metadata.Dokumento_failas;
+    if (doc.metadata?.file_name) 
+      return doc.metadata.file_name;
+    if (doc.metadata?.Projekto_pavadinimas) 
+      return doc.metadata.Projekto_pavadinimas;
+    if (doc.metadata?.projekto_pavadinimas) 
+      return doc.metadata.projekto_pavadinimas;
+    if (doc.metadata?.pavadinimas) 
+      return doc.metadata.pavadinimas;
+    if (doc.metadata?.title) 
+      return doc.metadata.title;
+    if (doc.metadata?.name) 
+      return doc.metadata.name;
+    
     return "Nežinomas dokumentas";
   };
 
@@ -227,6 +302,16 @@ export default function Chat() {
         });
         if (response.data?.document) {
           const fetchedDoc = response.data.document;
+          
+          // Try to extract a better document name from content if needed
+          if (!fetchedDoc.metadata?.Dokumento_pavadinimas && fetchedDoc.page_content) {
+            const extractedTitle = extractTitleFromContent(fetchedDoc.page_content);
+            if (extractedTitle && fetchedDoc.metadata) {
+              fetchedDoc.metadata.Dokumento_pavadinimas = extractedTitle;
+              fetchedDoc.metadata.dokumento_pavadinimas = extractedTitle;
+            }
+          }
+          
           setFocusedDocumentId(docId);
           setFocusedDocument(fetchedDoc);
           const detailedDocName = getDetailedDocName(fetchedDoc);
@@ -331,7 +416,19 @@ export default function Chat() {
         }
       ]);
       if (response.data.summary_documents && response.data.summary_documents.length > 0) {
-        setSummaryDocuments(response.data.summary_documents);
+        // Process summary documents to ensure consistent naming
+        const processedSummaryDocs = response.data.summary_documents.map(doc => {
+          // Try to extract a better document name from content if needed
+          if (doc.page_content && (!doc.metadata?.Dokumento_pavadinimas || doc.metadata?.Dokumento_pavadinimas === "Nežinomas dokumentas")) {
+            const extractedTitle = extractTitleFromContent(doc.page_content);
+            if (extractedTitle && doc.metadata) {
+              doc.metadata.Dokumento_pavadinimas = extractedTitle;
+              doc.metadata.dokumento_pavadinimas = extractedTitle;
+            }
+          }
+          return doc;
+        });
+        setSummaryDocuments(processedSummaryDocs);
       }
       if (!conversationId && response.data.conversation_id) {
         setConversationId(response.data.conversation_id);
@@ -380,7 +477,7 @@ export default function Chat() {
             <h1 className="text-xl font-bold">
               <span className="text-[#FFB703]">PROJEKTŲ </span>
               <span className="text-white"> ŽVALGAS</span>
-              <span className="text-white ml-2">Pagalbininkas</span>
+              <span className="text-white ml-2">PAGALBININKAS</span>
             </h1>
           </Link>
           <div className="flex items-center mb-4 md:mb-0">
