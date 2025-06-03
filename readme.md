@@ -39,48 +39,6 @@ Data is processed daily, and models are optimized for fast, lightweight deployme
 
 > Built entirely in **VS Code**, with occasional help from **GitHub Copilot** 🤖
 
----
-
-## 🔧 Features
-
-- Semantic search across tender documentation  
-- AI assistant fluent in Lithuanian construction domain  
-- Metadata extraction and deep querying of specific projects  
-- Lightweight, responsive frontend for a clean user experience  
-- AI workflows for answer generation and document grading
-
----
-
-## 🐳 Deployment Options
-
-### Single Container:
-- **Next.js API routes** handle both frontend and backend routing  
-- Ideal for quick demos via tunneling (e.g. Ngrok)
-
-### Multi-Container:
-- **Separate Docker containers** for backend (FastAPI) and frontend (Next.js)
-- Routing managed via inter-container networking
-
----
-
-## 🚀 Quick Start (Local)
-
-**1️⃣ Clone the repo:**
-
-```bash
-git clone https://github.com/ArturasGrygelis/Projektu-zvalgas-nextjs.git
-cd Projektu-zvalgas-nextjs
-
-
-
-## 2️⃣ Build and run single container setup:
-docker build -t project-scout .
-docker run -p 3000:3000 project-scout
-
-## 3️⃣ OR use multi-container setup:
-docker-compose up --build
-
-
 ## 📁 Project Structure
 /frontend       # Next.js frontend app
 /backend        # FastAPI backend with LangGraph workflows
@@ -133,6 +91,51 @@ Create an issue
 Fork the project
 
 Or just drop me a message
+
+
+---
+
+## 🔧 Features
+
+- Semantic search across tender documentation  
+- AI assistant fluent in Lithuanian construction domain  
+- Metadata extraction and deep querying of specific projects  
+- Lightweight, responsive frontend for a clean user experience  
+- AI workflows for answer generation and document grading
+
+---
+
+## 🐳 Deployment Options
+
+### Single Container:
+- **Next.js API routes** handle both frontend and backend routing  
+- Ideal for quick demos via tunneling (e.g. Ngrok)
+
+### Multi-Container:
+- **Separate Docker containers** for backend (FastAPI) and frontend (Next.js)
+- Routing managed via inter-container networking
+
+---
+
+## 🚀 Quick Start (Local)
+
+**1️⃣ Clone the repo:**
+
+```bash
+git clone https://github.com/ArturasGrygelis/Projektu-zvalgas-nextjs.git
+cd Projektu-zvalgas-nextjs
+
+
+
+## 2️⃣ Build and run single container setup:
+docker build -t project-scout .
+docker run -p 3000:3000 project-scout
+
+## 3️⃣ OR use multi-container setup:
+docker-compose up --build
+
+
+
 
 
 
