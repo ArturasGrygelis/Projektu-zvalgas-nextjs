@@ -388,7 +388,6 @@ export default function Chat() {
     e.preventDefault();
     if (!input.trim()) return;
     
-    // Add user message to chat
     const userMessage: Message = {
       role: 'user',
       content: input,
@@ -398,49 +397,43 @@ export default function Chat() {
     setInput('');
     setIsLoading(true);
     
-    // Reset input height
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
     
     try {
-      // Choose the appropriate endpoint based on whether a document is focused
-      // This is the key change to use create_direct_document_workflow
-      const endpoint = focusedDocumentId 
-        ? `${API_URL}/api/document-chat` 
-        : `${API_URL}/api/chat`;
-      
-      // Prepare request data
-      const requestData = {
+      // Prepare request data with document_id when focusing on a document
+      const requestData: any = {
         message: input,
         model_name: selectedModel,
-        conversation_id: conversationId,
-        ...(focusedDocumentId ? { document_id: focusedDocumentId } : {})
+        conversation_id: conversationId
       };
       
-      console.log(`Sending request to ${endpoint} with document_id: ${focusedDocumentId || 'none'}`);
+      // Add document_id if a specific document is focused
+      if (focusedDocumentId) {
+        requestData.document_id = focusedDocumentId;
+      }
       
-      // Make API request
-      const response = await axios.post<ChatApiResponse>(
-        endpoint, 
-        requestData, 
-        { timeout: 120000 }
-      );
+      // Choose endpoint based on whether we're focusing on a document
+      // This follows the example code that uses /api/document when focusing
+      const endpoint = focusedDocumentId ? `${API_URL}/api/document` : `${API_URL}/api/chat`;
+      
+      const response = await axios.post<ChatApiResponse>(endpoint, requestData, {
+        timeout: 120000
+      });
       
       // Parse response timestamp
       let responseTimestamp = new Date();
       try {
         if (response.data.created_at) {
-          const timestamp = new Date(response.data.created_at);
-          if (!isNaN(timestamp.getTime())) {
-            responseTimestamp = timestamp;
+          responseTimestamp = new Date(response.data.created_at);
+          if (isNaN(responseTimestamp.getTime())) {
+             responseTimestamp = new Date();
           }
         }
-      } catch (dateError) {
-        // Use default timestamp if parsing fails
-      }
+      } catch (dateError) {}
       
-      // Add response to messages
+      // Add assistant message to chat
       setMessages(prev => [
         ...prev,
         {
@@ -451,9 +444,23 @@ export default function Chat() {
         }
       ]);
       
-      // Only update documents if not in focused mode and if summary documents are provided
-      if (!focusedDocumentId && response.data.summary_documents?.length) {
-        setSummaryDocuments(response.data.summary_documents);
+      // Update documents if they're included in the response
+      // Only update if we're not in document focus mode
+      if (!focusedDocumentId && response.data.summary_documents?.length > 0) {
+        // Process summary documents to ensure consistent naming
+        const processedSummaryDocs = response.data.summary_documents.map(doc => {
+          // Try to extract a better document name from content if needed
+          if (doc.page_content && (!doc.metadata?.Dokumento_pavadinimas || 
+              doc.metadata?.Dokumento_pavadinimas === "Nežinomas dokumentas")) {
+            const extractedTitle = extractTitleFromContent(doc.page_content);
+            if (extractedTitle && doc.metadata) {
+              doc.metadata.Dokumento_pavadinimas = extractedTitle;
+              doc.metadata.dokumento_pavadinimas = extractedTitle;
+            }
+          }
+          return doc;
+        });
+        setSummaryDocuments(processedSummaryDocs);
       }
       
       // Store conversation ID if not already set
@@ -465,7 +472,7 @@ export default function Chat() {
       const errorMessage = error instanceof Error 
         ? `Error: ${error.message}` 
         : `Error: ${String(error)}`;
-        
+      
       setMessages(prev => [
         ...prev,
         {
@@ -475,7 +482,6 @@ export default function Chat() {
         }
       ]);
     } finally {
-      // Reset loading state and focus input
       setIsLoading(false);
       inputRef.current?.focus();
     }
@@ -492,13 +498,13 @@ export default function Chat() {
   // Test connection to API
   const testConnection = async () => {
     try {
-      const testResponse = await axios.post(`${API_URL}/api/chat`, {
+      const testResponse = await axios.post(`${API_URL}/api/raw-response`, {
         message: "Test message",
         model_name: selectedModel
       });
-      alert(`Connection successful! Backend is responding.`);
+      alert(`Test successful! Response: ${JSON.stringify(testResponse.data)}`);
     } catch (error) {
-      alert(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
+      alert(`Test failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -520,7 +526,7 @@ export default function Chat() {
             <h1 className="text-xl font-bold">
               <span className="text-[#FFB703]">PROJEKTŲ </span>
               <span className="text-white"> ŽVALGAS</span>
-              <span className="text-white ml-2">Pagalbininkas</span>
+              <span className="text-white ml-2">PAGALBININKAS</span>
             </h1>
           </Link>
           <div className="flex items-center mb-4 md:mb-0">
@@ -543,9 +549,9 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* Main content area */}
+      {/* Main content area - exact calculation to match footer */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - conditionally shown */}
+        {/* Sidebar - stretches to footer */}
         {showSidebar && (
           <div className="hidden md:block md:w-1/4 lg:w-1/5 border-r border-gray-200 bg-white overflow-hidden">
             <DocumentSidebar 
@@ -559,7 +565,7 @@ export default function Chat() {
         
         {/* Main content with chat and input */}
         <div className="flex-grow flex flex-col">
-          {/* Chat messages area */}
+          {/* Chat messages area - takes most of the space */}
           <div className="flex-grow overflow-y-auto bg-white mb-1 border border-gray-100">
             <ChatBox messages={messages} />
             <div ref={messagesEndRef} />
@@ -587,7 +593,7 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Input area */}
+          {/* Input area - positioned right above footer */}
           <div className="border-t border-gray-200 pt-2 pb-2 px-4 bg-white">
             <form onSubmit={handleSubmit}>
               <div className="relative">

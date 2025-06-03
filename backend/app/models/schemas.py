@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
     model_name: Optional[str] = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    document_id: Optional[str] = None  # Added for document focus workflow
 
 class ChatResponse(BaseModel):
     message: str
