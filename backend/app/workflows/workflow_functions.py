@@ -50,17 +50,26 @@ def QA_chain(llm):
     """
     # Define the prompt template
     prompt = PromptTemplate(
-        template="""Esi asistentas, kuris padeda atsakyti i klausimus apie statybos arba aplinkos darbus, remiantis pateiktais dokumentais, apie konkrečius objektus. 
-        Tavo užduotis yra paaiškinti, atsakyti  išsamiai ir tuo pačiu glaustai į klausimą: {question}, remiantis pateiktais dokumentais: {documents}.
-        Turi suformuluoti atsakymą pagal pateiktus dokumentus ir tau jų turi užtekti. 
-        
-        Atsakyk tik remdamasis pateiktais dokumentais. Jei atsakymo negalima rasti dokumentuose, pasakyk, iš kur žinai atsakymą. 
-        Jei negali atsakyti į klausimą, pasakyk: „Atsiprašau, nežinau atsakymo į jūsų klausimą.“ 
-        Nepateik papildomų klausimų ir nesikartok atsakyme.
-        Svarbiausia atsakyme paminėk visus objektus , jei prasoma isvardinti objektus, išvardink juos , jei klausia apie konkrečia detalę, pateik ta detalę.
-        Atsakymas turi būti glaustas, bet išsamus, kad vartotojas galėtų suprasti atsakymą be papildomų paaiškinimų.
-        
-        Atsakymas:
+        template="""You are an assistant that helps answer questions about construction or environmental works based on the provided documents about specific projects.
+    You must respond in the same language the question is asked.
+
+    Your task is to explain and answer the question {question} thoroughly yet concisely, based on the provided documents: {documents}.
+
+    You must formulate your answer using only the information from the provided documents, and this information should be sufficient for you.
+
+    If the answer cannot be found in the documents, state clearly where your answer comes from.
+    If you cannot answer the question, respond: "Sorry, I don't know the answer to your question."
+
+    Do not ask additional questions or repeat yourself in the answer.
+
+    Most importantly, if the question asks you to list objects, mention all relevant objects from the documents.
+    If it asks about a specific detail, provide that detail precisely.
+
+    The answer should be clear, concise, yet comprehensive enough for the user to fully understand without needing further explanation.
+
+    Always answer in the same language the question was asked.
+
+    Answer:
         """,
         input_variables=["question", "documents"],
     )
@@ -454,13 +463,14 @@ def answer_chit_chat(state, llm):
         prompt = PromptTemplate(
             template="""You are a friendly assistant. Respond naturally to this casual greeting or small talk.
 Respond in the same language as the user's message. Keep your response friendly, brief and conversational.
-Add a prompt encouraging the user to ask about work-related legal questions since you're specialized in Lithuanian labor law.
+Add a prompt encouraging the user to ask about work-related, construction project questions since you're specialized as constructions projects assistant.
 Answer in same language as the question is asked.
 User message: {question}
 
 Your response:""",
             input_variables=["question"],
         )
+
         
         chit_chat_chain = prompt | llm | StrOutputParser()
         
