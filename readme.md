@@ -127,11 +127,11 @@ cd Projektu-zvalgas-nextjs
 
 
 
-## 2️⃣ Build and run single container setup:
+2️⃣ Build and run single container setup:
 docker build -t project-scout .
 docker run -p 3000:3000 project-scout
 
-## 3️⃣ OR use multi-container setup:
+3️⃣ OR use multi-container setup:
 docker-compose up --build
 
 
